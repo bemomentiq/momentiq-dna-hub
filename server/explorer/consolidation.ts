@@ -3,9 +3,6 @@
 
 import { storage } from "../storage";
 
-const CC_API_URL = process.env.CC_API_URL ?? "https://command-center-api-production-96e2.up.railway.app";
-const CC_API_KEY = process.env.CC_API_KEY ?? process.env.AGENT_API_KEY ?? "miq-cmd-center-2026";
-
 // Mini fleet pool — round-robin by created_at of most recent consolidation CC task
 const MINI_EXECUTORS = ["mini-1", "mini-2", "mini-3", "mini-4", "mini-5"];
 
@@ -25,6 +22,8 @@ export interface ConsolidationDispatchResult {
 
 export async function dispatchConsolidationToCC(): Promise<ConsolidationDispatchResult> {
   const cfg = storage.getCronConfig() as any;
+  const ccApiUrl = cfg.cc_api_url || process.env.CC_API_URL || "https://command-center-api-production-96e2.up.railway.app";
+  const ccApiKey = cfg.cc_api_key || process.env.CC_API_KEY || process.env.AGENT_API_KEY || "miq-cmd-center-2026";
   const briefingGist = cfg.consolidation_briefing_gist as string;
   const executor = pickExecutor();
 
@@ -32,9 +31,12 @@ export async function dispatchConsolidationToCC(): Promise<ConsolidationDispatch
   let briefingBody: string;
   try {
     const res = await fetch(briefingGist);
-    briefingBody = res.ok ? await res.text() : `Fetch failed (${res.status}): ${briefingGist}`;
+    if (!res.ok) {
+      return { ok: false, error: `Briefing fetch failed (${res.status}): ${briefingGist}` };
+    }
+    briefingBody = await res.text();
   } catch (err: any) {
-    briefingBody = `Fetch error: ${err?.message ?? err}`;
+    return { ok: false, error: `Briefing fetch error: ${err?.message ?? err}` };
   }
 
   const now = new Date().toISOString();
@@ -52,11 +54,11 @@ export async function dispatchConsolidationToCC(): Promise<ConsolidationDispatch
   };
 
   try {
-    const res = await fetch(`${CC_API_URL}/api/tasks`, {
+    const res = await fetch(`${ccApiUrl}/api/tasks`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${CC_API_KEY}`,
+        Authorization: `Bearer ${ccApiKey}`,
       },
       body: JSON.stringify(payload),
     });
