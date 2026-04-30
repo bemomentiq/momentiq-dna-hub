@@ -8,14 +8,15 @@
 
 import { storage } from "../storage";
 import { dispatchConsolidationToCC } from "./consolidation";
+import { dispatchOrganizerToCC, computeExplorerPauseDecision, setExplorerPaused, isOrganizerDue } from "./backlog-organizer";
 
 const HUB_BASE = process.env.NODE_ENV === "production"
   ? "https://momentiq-dna-hub.up.railway.app/port/5000"
   : "http://localhost:5000";
 
-type Kind = "explorer" | "executor" | "audit" | "test_debug" | "consolidation";
+type Kind = "explorer" | "executor" | "audit" | "test_debug" | "consolidation" | "organizer";
 
-const lastDispatchAt: Record<Kind, number> = { explorer: 0, executor: 0, audit: 0, test_debug: 0, consolidation: 0 };
+const lastDispatchAt: Record<Kind, number> = { explorer: 0, executor: 0, audit: 0, test_debug: 0, consolidation: 0, organizer: 0 };
 
 async function inFlightCount(kind: Kind): Promise<number> {
   if (kind === "explorer") {
@@ -29,8 +30,8 @@ async function inFlightCount(kind: Kind): Promise<number> {
     return storage.listFleetRuns({ kind: "test_debug_cron", status: "running" }).length
       + storage.listFleetRuns({ kind: "test_debug_cron", status: "queued" }).length;
   }
-  // Consolidation dispatches externally to CC and returns immediately — always 0 in-flight
-  if (kind === "consolidation") {
+  // Consolidation and Organizer dispatch externally to CC — always 0 in-flight from Hub perspective
+  if (kind === "consolidation" || kind === "organizer") {
     return 0;
   }
   return storage.listFleetRuns({ kind: "executor_cron", status: "running" }).length
@@ -174,6 +175,11 @@ async function dispatchConsolidation(): Promise<{ ok: boolean; run_id?: number; 
   return { ok: r.ok, run_id: r.cc_task_id, error: r.error };
 }
 
+async function dispatchOrganizer(): Promise<{ ok: boolean; run_id?: number; error?: string }> {
+  const r = await dispatchOrganizerToCC({ kind: "full_backlog" });
+  return { ok: r.ok, run_id: r.cc_task_id, error: r.error };
+}
+
 // Cascade: primary CC dispatch → if fails, mini-5 direct-tunnel
 async function dispatchWithCascade(kind: Kind): Promise<void> {
   // Consolidation dispatches directly to CC (fire-and-forget) — no fleet cascade needed
@@ -183,6 +189,17 @@ async function dispatchWithCascade(kind: Kind): Promise<void> {
       console.log(`[auto-resume] consolidation dispatched cc_task_id=${r.run_id}`);
     } else {
       console.error(`[auto-resume] consolidation dispatch failed: ${r.error}`);
+    }
+    return;
+  }
+
+  // Organizer dispatches directly to CC (fire-and-forget)
+  if (kind === "organizer") {
+    const r = await dispatchOrganizer();
+    if (r.ok) {
+      console.log(`[auto-resume] organizer dispatched cc_task_id=${r.run_id}`);
+    } else {
+      console.error(`[auto-resume] organizer dispatch failed: ${r.error}`);
     }
     return;
   }
@@ -243,11 +260,12 @@ async function tick(): Promise<void> {
   const now = Date.now();
   const minGapMs = (cfg.auto_resume_min_gap_sec ?? 30) * 1000;
 
-  for (const kind of ["explorer", "executor", "audit", "test_debug", "consolidation"] as Kind[]) {
+  for (const kind of ["explorer", "executor", "audit", "test_debug", "consolidation", "organizer"] as Kind[]) {
     const flagKey = kind === "explorer" ? "auto_resume_explorer"
       : kind === "audit" ? "auto_resume_audit"
       : kind === "test_debug" ? "auto_resume_test_debug"
       : kind === "consolidation" ? "consolidation_cron_enabled"
+      : kind === "organizer" ? "organizer_cron_enabled"
       : "auto_resume_executor";
     if (!(cfg as any)[flagKey]) continue;
 
@@ -261,12 +279,23 @@ async function tick(): Promise<void> {
       ? ((cfg as any).auto_resume_audit_max ?? 1)
       : kind === "test_debug"
       ? ((cfg as any).auto_resume_test_debug_max ?? 1)
-      : kind === "consolidation"
+      : kind === "consolidation" || kind === "organizer"
       ? 1
       : (cfg.auto_resume_executor_max ?? cfg.auto_resume_max_concurrent ?? 3);
 
     const inFlight = await inFlightCount(kind);
     if (inFlight >= maxConcurrent) continue;
+
+    // Explorer-specific: dynamic pause check (open-cap + novelty-floor heuristic)
+    if (kind === "explorer") {
+      const decision = computeExplorerPauseDecision();
+      if (decision.pause) {
+        setExplorerPaused(decision.reason ?? "unknown");
+        console.log(`[auto-resume] Explorer paused: ${decision.reason}`);
+        continue;
+      }
+      setExplorerPaused(null);
+    }
 
     // Executor-specific: back off if queue was drained (consecutive QUEUE_EMPTY pickups)
     if (kind === "executor" && isExecutorQueueEmpty()) {
@@ -297,6 +326,15 @@ async function tick(): Promise<void> {
       const intervalHours = (cfg as any).consolidation_cron_interval_hours ?? 1;
       if (!isConsolidationDue(intervalHours)) {
         console.log(`[auto-resume] consolidation not yet due (interval=${intervalHours}h); skipping tick`);
+        continue;
+      }
+    }
+
+    // Organizer: interval-gated (default 30 min)
+    if (kind === "organizer") {
+      const intervalMinutes = (cfg as any).organizer_cron_interval_minutes ?? 30;
+      if (!isOrganizerDue(intervalMinutes)) {
+        console.log(`[auto-resume] organizer not yet due (interval=${intervalMinutes}min); skipping tick`);
         continue;
       }
     }
