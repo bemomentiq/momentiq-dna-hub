@@ -1,3 +1,4 @@
+import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import {
@@ -23,6 +24,7 @@ import {
   ExternalLink,
   Baby,
   Bug,
+  RefreshCw,
 } from "lucide-react";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -294,6 +296,35 @@ export default function Autonomy() {
     refetchInterval: 30_000,
   });
 
+  const { data: consolidationCfg, refetch: refetchConsolidation } = useQuery<{
+    enabled: boolean;
+    interval_hours: number;
+    briefing_gist: string;
+    last_run_at: string | null;
+    last_cc_task_id: number | null;
+  }>({
+    queryKey: ["/api/consolidation/config"],
+    refetchInterval: 30_000,
+  });
+
+  const [consolidationDispatching, setConsolidationDispatching] = React.useState(false);
+  const [consolidationResult, setConsolidationResult] = React.useState<string | null>(null);
+
+  async function dispatchConsolidationNow() {
+    setConsolidationDispatching(true);
+    setConsolidationResult(null);
+    try {
+      const r = await fetch("/api/consolidation/dispatch-now", { method: "POST" });
+      const j = await r.json();
+      setConsolidationResult(r.ok ? `Dispatched CC task #${j.task_id}` : `Error: ${j.error}`);
+      refetchConsolidation();
+    } catch (e: any) {
+      setConsolidationResult(`Failed: ${e?.message ?? e}`);
+    } finally {
+      setConsolidationDispatching(false);
+    }
+  }
+
   const recentPrs = recentPrsData?.prs ?? [];
 
   // PRs merged in last 24h
@@ -389,6 +420,73 @@ export default function Autonomy() {
           description="Runs E2E smoke probes against deployed surfaces every 4 hours. Files GitHub issues for regressions found."
         />
       </div>
+
+      {/* ── Consolidation Cron Lane ──────────────────────────────────────── */}
+      <section className="rounded-xl border border-violet-500/30 bg-card p-5 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold text-sm flex items-center gap-2">
+            <RefreshCw className="h-4 w-4 text-violet-500" />
+            Consolidation Cron
+            <span className="text-xs font-normal text-muted-foreground">— 5th lane (CC-dispatched)</span>
+            {consolidationCfg?.enabled
+              ? <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 font-medium">enabled</span>
+              : <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border font-medium">disabled</span>
+            }
+          </h2>
+          <button
+            onClick={dispatchConsolidationNow}
+            disabled={consolidationDispatching}
+            className={cn(
+              "text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors",
+              consolidationDispatching
+                ? "opacity-50 cursor-not-allowed border-border text-muted-foreground"
+                : "border-violet-500/40 bg-violet-500/10 text-violet-700 dark:text-violet-300 hover:bg-violet-500/20"
+            )}
+          >
+            {consolidationDispatching ? "Dispatching…" : "Dispatch now"}
+          </button>
+        </div>
+        <p className="text-[11px] text-muted-foreground mb-4 leading-snug">
+          Every {consolidationCfg?.interval_hours ?? 1}h, POSTs the consolidation briefing as a CC task — picked up by the healthiest Mini.
+          Consolidates all <code className="text-[10px] bg-muted px-1 rounded">from-explorer-*</code> issues into a 6-phase Epic→Task hierarchy on <span className="font-mono text-[10px]">bemomentiq/momentiq-dna</span>.
+        </p>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Interval</span>
+            <span className="font-mono">{consolidationCfg?.interval_hours ?? 1}h</span>
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Last run</span>
+            <span className="font-mono">
+              {consolidationCfg?.last_run_at ? formatRelative(consolidationCfg.last_run_at) : "never"}
+            </span>
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Last CC task</span>
+            <span className="font-mono">
+              {consolidationCfg?.last_cc_task_id ? `#${consolidationCfg.last_cc_task_id}` : "—"}
+            </span>
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Next due</span>
+            <span className="font-mono">
+              {consolidationCfg?.last_run_at
+                ? formatRelative(new Date(new Date(consolidationCfg.last_run_at).getTime() + (consolidationCfg.interval_hours ?? 1) * 3600_000).toISOString())
+                : "now"}
+            </span>
+          </div>
+        </div>
+        {consolidationResult && (
+          <div className={cn(
+            "mt-3 text-xs px-3 py-2 rounded-lg border",
+            consolidationResult.startsWith("Error") || consolidationResult.startsWith("Failed")
+              ? "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300"
+              : "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+          )}>
+            {consolidationResult}
+          </div>
+        )}
+      </section>
 
       {/* ── Stacked area chart — in-flight over last 6h ─────────────────── */}
       <section className="rounded-xl border border-card-border bg-card p-5 mb-6">
