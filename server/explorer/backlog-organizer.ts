@@ -103,11 +103,21 @@ export async function dispatchOrganizerToCC(scope: OrganizerScope): Promise<Orga
     ? ` (recent-only since ${scope.recent_since_iso ?? "1h ago"})`
     : scope.kind === "inline_post_explorer" ? " (inline post-explorer)" : "";
 
+  const defaultRepo = cfg.default_gh_repo ?? "bemomentiq/momentiq-dna";
+  const hubBase = process.env.NODE_ENV === "production"
+    ? "https://momentiq-dna-hub.up.railway.app/port/5000"
+    : "http://localhost:5000";
+  const issueLimit = scope.max_issues ?? 2000;
+  const ghListCmd = scope.kind === "recent_only" && scope.recent_since_iso
+    ? `gh issue list -R ${defaultRepo} --state open --search "created:>=${scope.recent_since_iso}" --limit ${issueLimit} --json number,title,body,labels,createdAt > /tmp/open-issues.json`
+    : `gh issue list -R ${defaultRepo} --state open --limit ${issueLimit} --json number,title,body,labels,createdAt > /tmp/open-issues.json`;
   const briefing = ORGANIZER_BRIEFING
-    .replace(/{DEFAULT_REPO}/g, cfg.default_gh_repo ?? "bemomentiq/momentiq-dna")
-    .replace(/{HUB_BASE}/g, process.env.NODE_ENV === "production"
-      ? "https://momentiq-dna-hub.up.railway.app/port/5000"
-      : "http://localhost:5000");
+    .replace(
+      /gh issue list -R \{DEFAULT_REPO\} --state open --limit 2000 --json number,title,body,labels,createdAt > \/tmp\/open-issues\.json/,
+      ghListCmd,
+    )
+    .replace(/{DEFAULT_REPO}/g, defaultRepo)
+    .replace(/{HUB_BASE}/g, hubBase);
 
   const payload = {
     title: `[DNA-ORGANIZER-CRON] Backlog Organizer run ${now.slice(0, 16)}${scopeNote}`,
@@ -159,8 +169,8 @@ export function computeExplorerPauseDecision(): ExplorerPauseDecision {
 
   // Check 1: hard cap on open issues (use cached draft_tasks count as proxy)
   const cap: number = cfg.explorer_max_open_issues ?? 1000;
-  const openCount: number = storage.listDraftTasks({ status: "proposed" }).length
-    + storage.listDraftTasks({ status: "queued" as any }).length;
+  const openCount: number = storage.countDraftTasks({ status: "proposed" })
+    + storage.countDraftTasks({ status: "queued" });
   if (openCount >= cap) {
     return {
       pause: true,

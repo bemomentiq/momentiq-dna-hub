@@ -563,6 +563,13 @@ export const storage = {
     if (conds.length) q = q.where(conds.length === 1 ? conds[0] : and(...conds));
     return q.orderBy(desc(draftTasks.id)).limit(filter?.limit ?? 200).all();
   },
+  countDraftTasks(filter?: { status?: string }): number {
+    const conds = [] as any[];
+    if (filter?.status) conds.push(eq(draftTasks.status, filter.status));
+    let q = db.select({ c: sql<number>`count(*)` }).from(draftTasks) as any;
+    if (conds.length) q = q.where(conds[0]);
+    return q.get()?.c ?? 0;
+  },
   getDraftTask(id: number): DraftTask | undefined {
     return db.select().from(draftTasks).where(eq(draftTasks.id, id)).get();
   },
