@@ -12,9 +12,9 @@ const HUB_BASE = process.env.NODE_ENV === "production"
   ? "https://momentiq-dna-hub.up.railway.app/port/5000"
   : "http://localhost:5000";
 
-type Kind = "explorer" | "executor" | "audit";
+type Kind = "explorer" | "executor" | "audit" | "test_debug";
 
-const lastDispatchAt: Record<Kind, number> = { explorer: 0, executor: 0, audit: 0 };
+const lastDispatchAt: Record<Kind, number> = { explorer: 0, executor: 0, audit: 0, test_debug: 0 };
 
 async function inFlightCount(kind: Kind): Promise<number> {
   if (kind === "explorer") {
@@ -23,6 +23,10 @@ async function inFlightCount(kind: Kind): Promise<number> {
   if (kind === "audit") {
     return storage.listFleetRuns({ kind: "audit_cron", status: "running" }).length
       + storage.listFleetRuns({ kind: "audit_cron", status: "queued" }).length;
+  }
+  if (kind === "test_debug") {
+    return storage.listFleetRuns({ kind: "test_debug_cron", status: "running" }).length
+      + storage.listFleetRuns({ kind: "test_debug_cron", status: "queued" }).length;
   }
   return storage.listFleetRuns({ kind: "executor_cron", status: "running" }).length
     + storage.listFleetRuns({ kind: "executor_cron", status: "queued" }).length
@@ -93,6 +97,24 @@ async function dispatchAudit(executor: string, fallback: string): Promise<{ ok: 
   return { ok: true, run_id: j?.run_id };
 }
 
+async function dispatchTestDebug(executor: string, fallback: string): Promise<{ ok: boolean; run_id?: number; error?: string }> {
+  const r = await fetch(`${HUB_BASE}/api/test-debug/dispatch`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "User-Agent": "Mozilla/5.0" },
+    body: JSON.stringify({
+      trigger: "auto_resume",
+      executor,
+      fallback_executor: fallback,
+      priority: "p2",
+    }),
+  });
+  if (!r.ok) {
+    return { ok: false, error: `${r.status}: ${(await r.text()).slice(0, 200)}` };
+  }
+  const j = (await r.json()) as any;
+  return { ok: true, run_id: j?.run_id };
+}
+
 async function dispatchExecutor(executor: string, fallback: string): Promise<{ ok: boolean; run_id?: number; error?: string }> {
   const r = await fetch(`${HUB_BASE}/api/executor/dispatch`, {
     method: "POST",
@@ -122,11 +144,23 @@ function isAuditDue(intervalHours: number): boolean {
   return elapsedHours >= intervalHours;
 }
 
+function isTestDebugDue(intervalHours: number): boolean {
+  const runs = storage.listFleetRuns({ kind: "test_debug_cron", limit: 1 });
+  if (!runs.length) return true;
+  const lastRun = runs[0];
+  const lastAt = new Date(lastRun.started_at).getTime();
+  const elapsedHours = (Date.now() - lastAt) / (1000 * 60 * 60);
+  return elapsedHours >= intervalHours;
+}
+
 // Cascade: primary CC dispatch → if fails, mini-5 direct-tunnel
 async function dispatchWithCascade(kind: Kind): Promise<void> {
   const cfg = storage.getCronConfig();
   const { primary, fallback } = pickLane(kind);
-  const fn = kind === "explorer" ? dispatchExplorer : kind === "audit" ? dispatchAudit : dispatchExecutor;
+  const fn = kind === "explorer" ? dispatchExplorer
+    : kind === "audit" ? dispatchAudit
+    : kind === "test_debug" ? dispatchTestDebug
+    : dispatchExecutor;
 
   const r1 = await fn(primary, fallback);
   if (r1.ok) {
@@ -177,18 +211,23 @@ async function tick(): Promise<void> {
   const now = Date.now();
   const minGapMs = (cfg.auto_resume_min_gap_sec ?? 30) * 1000;
 
-  for (const kind of ["explorer", "executor", "audit"] as Kind[]) {
-    const flagKey = kind === "explorer" ? "auto_resume_explorer" : kind === "audit" ? "auto_resume_audit" : "auto_resume_executor";
+  for (const kind of ["explorer", "executor", "audit", "test_debug"] as Kind[]) {
+    const flagKey = kind === "explorer" ? "auto_resume_explorer"
+      : kind === "audit" ? "auto_resume_audit"
+      : kind === "test_debug" ? "auto_resume_test_debug"
+      : "auto_resume_executor";
     if (!(cfg as any)[flagKey]) continue;
 
     const elapsed = now - lastDispatchAt[kind];
     if (elapsed < minGapMs) continue;
 
-    // Per-kind cap: prefer the new per-kind field, fall back to legacy shared cap for first-run safety
+    // Per-kind cap
     const maxConcurrent = kind === "explorer"
       ? (cfg.auto_resume_explorer_max ?? cfg.auto_resume_max_concurrent ?? 3)
       : kind === "audit"
       ? ((cfg as any).auto_resume_audit_max ?? 1)
+      : kind === "test_debug"
+      ? ((cfg as any).auto_resume_test_debug_max ?? 1)
       : (cfg.auto_resume_executor_max ?? cfg.auto_resume_max_concurrent ?? 3);
 
     const inFlight = await inFlightCount(kind);
@@ -205,6 +244,15 @@ async function tick(): Promise<void> {
       const intervalHours = (cfg as any).audit_interval_hours ?? 6;
       if (!isAuditDue(intervalHours)) {
         console.log(`[auto-resume] audit not yet due (interval=${intervalHours}h); skipping tick`);
+        continue;
+      }
+    }
+
+    // Test-debug: interval-gated (default 4h)
+    if (kind === "test_debug") {
+      const intervalHours = (cfg as any).test_debug_interval_hours ?? 4;
+      if (!isTestDebugDue(intervalHours)) {
+        console.log(`[auto-resume] test_debug not yet due (interval=${intervalHours}h); skipping tick`);
         continue;
       }
     }

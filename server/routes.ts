@@ -12,6 +12,7 @@ import { registerTestDebugRoutes } from "./explorer/test-debug";
 import { registerSkillsRoutes } from "./explorer/skills";
 import { startAutoResumer, startReaper, lastReapedCount, lastReapedAt } from "./explorer/auto-resume";
 import { computeCascadeStats } from "./explorer/cascade-dispatch";
+import { fetchKalodataSignals } from "./explorer/kalodata-signals";
 import { storage } from "./storage";
 import { buildDigestMarkdown } from "./digest";
 
@@ -251,6 +252,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const lastExplorer = storage.listRuns(1)[0];
     const lastExecutor = storage.listFleetRuns({ kind: "executor_cron", limit: 1 })[0];
     const lastAudit = storage.listFleetRuns({ kind: "audit_cron", limit: 1 })[0];
+    const db = storage.getDb();
+    const lastTestDebug = (db as any).prepare("SELECT * FROM test_debug_runs ORDER BY id DESC LIMIT 1").get() as any;
+    const lastPrBabysitter = (db as any).prepare("SELECT * FROM pr_babysitter_runs ORDER BY id DESC LIMIT 1").get() as any;
     res.json({
       auto_resume: {
         explorer: !!cfg.auto_resume_explorer,
@@ -274,6 +278,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         last_run_at: lastAudit?.started_at ?? null,
         last_status: lastAudit?.status ?? null,
       },
+      test_debug: {
+        enabled: !!(cfg as any).auto_resume_test_debug,
+        max: (cfg as any).auto_resume_test_debug_max ?? 1,
+        interval_hours: (cfg as any).test_debug_interval_hours ?? 4,
+        last_run_at: lastTestDebug?.started_at ?? null,
+        last_status: lastTestDebug?.status ?? null,
+        last_findings_count: lastTestDebug?.findings_count ?? null,
+      },
+      pr_babysitter: {
+        enabled: !!(cfg as any).pr_babysitter_enabled,
+        last_run_at: lastPrBabysitter?.started_at ?? null,
+        last_status: lastPrBabysitter?.status ?? null,
+        last_pr_number: lastPrBabysitter?.pr_number ?? null,
+      },
       reaper: {
         stale_run_max_age_sec: cfg.stale_run_max_age_sec ?? 2400,
         last_reaped_count: lastReapedCount,
@@ -289,6 +307,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       })(),
       ts: new Date().toISOString(),
     });
+  });
+
+  // ============ Companion site signals ============
+  app.get("/api/companion-signals", async (_req, res) => {
+    const signals = await fetchKalodataSignals();
+    res.json(signals);
   });
 
   // ============ Dynamic roadmap ============

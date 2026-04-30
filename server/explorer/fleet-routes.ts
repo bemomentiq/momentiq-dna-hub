@@ -160,6 +160,100 @@ Phase 5 — WRITE \`next_pickup\` DIRECTIVE (mandatory, <= 500 chars):
 `;
 }
 
+// ============ Epic-mode Executor Briefing ============
+// Like buildExecutorBriefing but plans + ships an entire EPIC (3-7 PRs) in one run.
+// Each child issue gets its own PR; the parent epic issue is kept updated.
+export function buildEpicExecutorBriefing(opts: {
+  run_id: number;
+  repos: string[];
+  hub_status_url: string;
+  ingest_url: string;
+  cc_api_url: string;
+  cc_api_key: string;
+  prior_summaries?: { id: number; started_at: string; summary: string; next_pickup?: string | null; gh_pr_url?: string | null; status: string }[];
+  ledger?: { pattern: string; heat: number; seen_count: number }[];
+  latest_next_pickup?: string | null;
+}): string {
+  const { run_id, repos, hub_status_url, prior_summaries = [], ledger = [], latest_next_pickup } = opts;
+
+  const { pickupSection, priorSection, ledgerSection } = buildFluidLoopContext({
+    kind: "executor",
+    runId: run_id,
+    priorRuns: prior_summaries.map((p) => ({
+      id: p.id,
+      started_at: p.started_at,
+      summary: p.summary,
+      next_pickup: p.next_pickup,
+      gh_pr_url: p.gh_pr_url,
+      status: p.status,
+    })),
+    ledger,
+    latestPickup: latest_next_pickup,
+  });
+
+  return `## Goal (Epic-mode Executor, run #${run_id})
+Plan and ship ONE EPIC end-to-end: discover the highest-priority open epic issue, list all its child issues (3-7), and sequentially merge each as its own PR. Keep the epic issue updated with merged-child checkboxes. Hard time limit: 35 min.
+
+## Context
+Target repos:
+${repos.map((r) => `- https://github.com/${r}`).join("\n")}
+
+Hub run record: GET ${hub_status_url}/api/fleet/runs/${run_id}
+${pickupSection}
+### Prior runs (last 10)
+${priorSection}
+
+### Hub ledger (heat-sorted top 20)
+${ledgerSection}
+
+## Implementation
+
+### Phase 0 — Pick epic (≤3 min)
+\`\`\`
+gh issue list --repo <repo> --label epic --state open --limit 20 --json number,title,body,labels
+\`\`\`
+If no issues have the \`epic\` label, look for issues whose body contains \`[ ] #M\` checkbox patterns.
+Pick the highest-priority epic (p0 > p1 > p2; oldest wins ties).
+List all child issues: parse checkbox lines + fetch each child with \`gh issue view <N>\`.
+PATCH Hub run with \`{ status: "planning", plan_markdown: "<epic title + list of children with effort estimate>" }\`.
+
+### Phase 1 — Plan children (≤5 min)
+For each child issue, determine: dependency order, shared branch prefix, test requirements.
+Write execution plan to Hub: \`{ plan_markdown: "<full plan>" }\`.
+
+### Phase 2-N — Ship each child (≤5 min each, max 7)
+For child issue #M:
+1. \`git checkout -b feat/dna-epic-${run_id}-cN-<slug> origin/main\`
+2. Implement the change (minimal, scoped to what the issue says)
+3. \`npx tsc --noEmit\` clean
+4. Commit: \`feat(scope): <description> (epic #P child #M)\`
+5. Push + \`gh pr create --title "..." --body "Closes #M\nPart of epic #P"\`
+6. \`gh pr merge <num> --rebase --auto\`
+7. Wait for merge (poll \`gh pr view <num> --json state -q .state\` every 30s, max 3min)
+8. Update epic issue: replace \`- [ ] #M\` with \`- [x] #M\`
+9. PATCH Hub run with progress update
+
+### Final — PATCH Hub
+PATCH ${hub_status_url}/api/fleet/runs/${run_id} with:
+\`{ status: "completed", summary: "Epic #P: shipped N/M children. PRs: <list>", next_pickup: "<next epic or remaining children>" }\`
+
+## Acceptance
+- All child PRs merged (or escalated with clear blocker reason)
+- Epic issue updated with [x] checkboxes for merged children
+- Hub run PATCHED to status=completed with summary
+
+## Out-of-scope
+- Starting a second epic in the same run
+- Amending PRs more than 3 times
+
+## Notes
+- Hard limit: 35 min total (vs 25 min for single-issue executor)
+- If you run out of time mid-epic, write next_pickup with the remaining child list
+- Skip a child if it is blocked by an unmerged earlier child; note in next_pickup
+- Use \`gh pr merge --rebase --auto\` — never squash or merge commit
+`;
+}
+
 // ============ Codebase Audit Briefing ============
 // Instructs the audit lane to:
 //   1. Fetch merged PRs from each repo (last 24h by default)
@@ -661,9 +755,11 @@ export function registerFleetRoutes(app: Express) {
       seen_count: l.seen_count,
     }));
 
-    const briefing = buildExecutorBriefing({
+    const epicMode = Boolean((cfg as any).epic_mode);
+    const repos = [cfg.default_gh_repo, cfg.frontend_gh_repo, (cfg as any).hub_gh_repo].filter(Boolean);
+    const baseOpts = {
       run_id: run.id,
-      repos: [cfg.default_gh_repo, cfg.frontend_gh_repo, (cfg as any).hub_gh_repo].filter(Boolean),
+      repos,
       hub_status_url: hubBase,
       ingest_url: `${prodHost}/api/fleet/runs/${run.id}`,
       cc_api_url: cfg.cc_api_url,
@@ -671,7 +767,10 @@ export function registerFleetRoutes(app: Express) {
       prior_summaries: priorExecRuns,
       ledger: ledgerForExec,
       latest_next_pickup: latestPickup,
-    });
+    };
+    const briefing = epicMode
+      ? buildEpicExecutorBriefing(baseOpts)
+      : buildExecutorBriefing({ ...baseOpts, open_issue_count: undefined });
     storage.updateFleetRun(run.id, { agent_briefing: briefing });
 
     // 3. Dispatch via 4-way cascade (mini-4 primary, mini-5 fallback; codex primary provider).
@@ -707,6 +806,74 @@ export function registerFleetRoutes(app: Express) {
       attempts: dispatch.attempts,
       direct_marker: dispatch.directMarker,
     });
+  });
+
+  // ==================== EPIC EXECUTOR DISPATCH ====================
+  app.post("/api/executor/dispatch-epic", async (req, res) => {
+    const cfg = storage.getCronConfig();
+    const trigger = (req.body?.trigger as string) || "executor_cron";
+    const executor = (req.body?.executor as string) || "pin-codex";
+    const fallback = (req.body?.fallback_executor as string) || "pin-claude";
+    const priority = (req.body?.priority as string) || "p1";
+    const repoUrl = (req.body?.repo_url as string) || `https://github.com/${cfg.default_gh_repo}`;
+
+    const run = storage.createFleetRun({
+      kind: "executor_cron",
+      started_at: new Date().toISOString(),
+      status: "queued",
+      trigger,
+      executor,
+      fallback_executor: fallback,
+      model: executor === "pin-codex" ? "gpt_5_5" : "claude_opus_4_7",
+      priority,
+      repo_url: repoUrl,
+      gh_issue_numbers_json: "[]",
+      agent_briefing: "",
+    });
+
+    storage.compactStaleFleetSummaries("executor_cron", 25);
+    const priorExecRuns = storage.listFleetRuns({ kind: "executor_cron", limit: 20 })
+      .filter((r) => r.id !== run.id && (r.status === "completed" || r.status === "failed" || r.summary))
+      .slice(0, 10)
+      .map((r) => ({ id: r.id, started_at: r.started_at, summary: r.summary || "", next_pickup: (r as any).next_pickup, gh_pr_url: r.gh_pr_url, status: r.status }));
+    const latestPickup = priorExecRuns.find((r) => r.next_pickup && !r.next_pickup.startsWith("[compacted]"))?.next_pickup ?? null;
+    const ledgerForExec = storage.listLedger(20).map((l) => ({ pattern: l.pattern, heat: l.heat, seen_count: l.seen_count }));
+
+    const briefing = buildEpicExecutorBriefing({
+      run_id: run.id,
+      repos: [cfg.default_gh_repo, cfg.frontend_gh_repo, (cfg as any).hub_gh_repo].filter(Boolean),
+      hub_status_url: hubBase,
+      ingest_url: `${prodHost}/api/fleet/runs/${run.id}`,
+      cc_api_url: cfg.cc_api_url,
+      cc_api_key: cfg.cc_api_key,
+      prior_summaries: priorExecRuns,
+      ledger: ledgerForExec,
+      latest_next_pickup: latestPickup,
+    });
+    storage.updateFleetRun(run.id, { agent_briefing: briefing });
+
+    const preferredProvider = executor === "pin-claude" ? "claude" as const : "codex" as const;
+    const dispatch = await dispatchWithCascade({
+      kind: "executor",
+      runId: run.id,
+      briefing,
+      preferredProvider,
+      preferredMini: "mini-4",
+      hubStatusUrl: `${prodHost}/api/fleet/runs/${run.id}`,
+      ccApiUrl: cfg.cc_api_url,
+      ccApiKey: cfg.cc_api_key,
+    });
+
+    if (!dispatch.ok) {
+      storage.updateFleetRun(run.id, { status: "failed", error: dispatch.error, finished_at: new Date().toISOString() });
+      return void res.status(502).json({ error: "cascade dispatch failed", detail: dispatch.error, attempts: dispatch.attempts });
+    }
+
+    storage.updateFleetRun(run.id, {
+      status: "running",
+      ...(dispatch.directMarker ? { direct_marker: dispatch.directMarker } : {}),
+    } as any);
+    res.json({ ok: true, run_id: run.id, mode: "epic", pid: dispatch.pid, final_target: dispatch.finalTarget, cascade_index: dispatch.cascadeIndex });
   });
 
   // Executor fallback: re-dispatch SAME run to claude lane

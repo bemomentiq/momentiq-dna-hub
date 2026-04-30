@@ -21,6 +21,9 @@ import {
   Clock,
   Sparkles,
   ExternalLink,
+  Bug,
+  GitPullRequest,
+  Activity,
 } from "lucide-react";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -34,7 +37,29 @@ type AutonomyStatus = {
     explorer_max: number;
     executor_max: number;
   };
+  test_debug: {
+    enabled: boolean;
+    interval_hours: number;
+    last_run_at: string | null;
+    last_status: string | null;
+    last_findings_count: number | null;
+  };
+  pr_babysitter: {
+    enabled: boolean;
+    last_run_at: string | null;
+    last_status: string | null;
+    last_pr_number: number | null;
+  };
   ts: string;
+};
+
+type CompanionSignals = {
+  readiness: { category: string; completion_pct: number; blocked_items: string[] }[] | null;
+  roadmapState: {
+    current_phase: string;
+    phases: { id: string; title: string; status: string; progress_pct: number }[];
+    next_milestone: string;
+  } | null;
 };
 
 type TimelineEntry = {
@@ -194,6 +219,11 @@ export default function Autonomy() {
     refetchInterval: 60_000,
   });
 
+  const { data: companionSignals } = useQuery<CompanionSignals>({
+    queryKey: ["/api/companion-signals"],
+    refetchInterval: 120_000,
+  });
+
   const recentPrs = recentPrsData?.prs ?? [];
 
   // PRs merged in last 24h
@@ -244,6 +274,109 @@ export default function Autonomy() {
           color="border-orange-500/30"
           sub="across 3 repos"
         />
+      </div>
+
+      {/* ── New lanes: PR Babysitter + Test-Debug + Companion Signals ────── */}
+      <div className="grid lg:grid-cols-3 gap-4 mb-6">
+        <section className="rounded-xl border border-card-border bg-card p-4">
+          <h3 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-3 flex items-center gap-2">
+            <GitPullRequest className="h-4 w-4 text-sky-500" />
+            PR Babysitter
+            <span className="text-[10px] normal-case font-normal">(event-triggered)</span>
+          </h3>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Enabled</span>
+              <span className={cn("font-medium", status?.pr_babysitter?.enabled ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>
+                {status?.pr_babysitter?.enabled ? "on" : "off"}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Last run</span>
+              <span className="text-foreground">{status?.pr_babysitter?.last_run_at ? formatRelative(status.pr_babysitter.last_run_at) : "never"}</span>
+            </div>
+            {status?.pr_babysitter?.last_status && (
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Status</span>
+                <span className={cn("font-medium capitalize", status.pr_babysitter.last_status === "completed" ? "text-emerald-600 dark:text-emerald-400" : status.pr_babysitter.last_status === "failed" ? "text-rose-600 dark:text-rose-400" : "text-amber-600 dark:text-amber-400")}>
+                  {status.pr_babysitter.last_status}
+                </span>
+              </div>
+            )}
+            {status?.pr_babysitter?.last_pr_number && (
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Last PR</span>
+                <span className="font-mono">#{status.pr_babysitter.last_pr_number}</span>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-card-border bg-card p-4">
+          <h3 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-3 flex items-center gap-2">
+            <Bug className="h-4 w-4 text-orange-500" />
+            Test-Debug
+            <span className="text-[10px] normal-case font-normal">(every {status?.test_debug?.interval_hours ?? 4}h)</span>
+          </h3>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Enabled</span>
+              <span className={cn("font-medium", status?.test_debug?.enabled ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>
+                {status?.test_debug?.enabled ? "on" : "off"}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Last run</span>
+              <span className="text-foreground">{status?.test_debug?.last_run_at ? formatRelative(status.test_debug.last_run_at) : "never"}</span>
+            </div>
+            {status?.test_debug?.last_status && (
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Status</span>
+                <span className={cn("font-medium capitalize", status.test_debug.last_status === "completed" ? "text-emerald-600 dark:text-emerald-400" : status.test_debug.last_status === "failed" ? "text-rose-600 dark:text-rose-400" : "text-amber-600 dark:text-amber-400")}>
+                  {status.test_debug.last_status}
+                </span>
+              </div>
+            )}
+            {status?.test_debug?.last_findings_count != null && (
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Findings</span>
+                <span className="font-medium">{status.test_debug.last_findings_count}</span>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-card-border bg-card p-4">
+          <h3 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-3 flex items-center gap-2">
+            <Activity className="h-4 w-4 text-violet-500" />
+            Companion signals
+          </h3>
+          {!companionSignals?.readiness ? (
+            <div className="text-xs text-muted-foreground italic">Kalodata unreachable or not configured.</div>
+          ) : (
+            <div className="space-y-1.5">
+              {companionSignals.readiness.slice(0, 5).map((item) => (
+                <div key={item.category} className="flex items-center gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[10px] text-muted-foreground truncate">{item.category}</div>
+                    <div className="h-1.5 rounded-full bg-muted mt-0.5 overflow-hidden">
+                      <div
+                        className={cn("h-full rounded-full", item.completion_pct >= 80 ? "bg-emerald-500" : item.completion_pct >= 50 ? "bg-amber-500" : "bg-rose-500")}
+                        style={{ width: `${item.completion_pct}%` }}
+                      />
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-mono shrink-0 text-muted-foreground">{item.completion_pct}%</span>
+                </div>
+              ))}
+              {companionSignals.roadmapState?.current_phase && (
+                <div className="mt-2 pt-2 border-t border-card-border text-[10px] text-muted-foreground">
+                  Phase: <span className="text-foreground font-medium">{companionSignals.roadmapState.current_phase}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
       </div>
 
       {/* ── Stacked area chart — in-flight over last 6h ─────────────────── */}
