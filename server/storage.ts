@@ -161,6 +161,13 @@ function ensureSchema() {
   if (!cHas("companion_site_url")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN companion_site_url TEXT NOT NULL DEFAULT 'https://kalodata-ai-content-platform-t.pplx.app'");
   if (!cHas("epic_mode")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN epic_mode INTEGER NOT NULL DEFAULT 1");
   if (!cHas("gh_webhook_secret")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN gh_webhook_secret TEXT NOT NULL DEFAULT 'dev-bypass'");
+  // Consolidation cron lane (5th lane — dispatches CC tasks for DNA issue consolidation)
+  if (!cHas("consolidation_cron_enabled")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN consolidation_cron_enabled INTEGER NOT NULL DEFAULT 1");
+  if (!cHas("consolidation_cron_interval_hours")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN consolidation_cron_interval_hours INTEGER NOT NULL DEFAULT 1");
+  if (!cHas("consolidation_briefing_gist")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN consolidation_briefing_gist TEXT NOT NULL DEFAULT 'https://gist.githubusercontent.com/Alexelsea/5fd8d54e9abed9b47aebf44fd09137b5/raw/db802ac8eb8ae4fe9f5c09f6c727eb970f00bd0d/briefing.md'");
+  if (!cHas("consolidation_last_run_at")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN consolidation_last_run_at TEXT");
+  if (!cHas("consolidation_last_cc_task_id")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN consolidation_last_cc_task_id INTEGER");
+  if (!cHas("consolidation_last_mini_idx")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN consolidation_last_mini_idx INTEGER NOT NULL DEFAULT 0");
   // Bump prior summaries default to 15 if still on legacy default
   sqlite.exec("UPDATE cron_config SET max_prior_summaries = 15 WHERE max_prior_summaries < 15");
   // Fleet runs (executor cron + ad-hoc)

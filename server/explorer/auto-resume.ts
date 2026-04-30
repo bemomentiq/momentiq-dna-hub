@@ -7,14 +7,15 @@
 // Idempotent: skips if a dispatch happened in the last auto_resume_min_gap_sec.
 
 import { storage } from "../storage";
+import { dispatchConsolidationToCC } from "./consolidation";
 
 const HUB_BASE = process.env.NODE_ENV === "production"
   ? "https://momentiq-dna-hub.up.railway.app/port/5000"
   : "http://localhost:5000";
 
-type Kind = "explorer" | "executor" | "audit" | "test_debug";
+type Kind = "explorer" | "executor" | "audit" | "test_debug" | "consolidation";
 
-const lastDispatchAt: Record<Kind, number> = { explorer: 0, executor: 0, audit: 0, test_debug: 0 };
+const lastDispatchAt: Record<Kind, number> = { explorer: 0, executor: 0, audit: 0, test_debug: 0, consolidation: 0 };
 
 async function inFlightCount(kind: Kind): Promise<number> {
   if (kind === "explorer") {
@@ -153,6 +154,12 @@ function isTestDebugDue(intervalHours: number): boolean {
   return elapsedHours >= intervalHours;
 }
 
+function isConsolidationDue(intervalHours: number, lastRunAt: string | null | undefined): boolean {
+  if (!lastRunAt) return true;
+  const elapsedHours = (Date.now() - new Date(lastRunAt).getTime()) / (1000 * 60 * 60);
+  return elapsedHours >= intervalHours;
+}
+
 // Cascade: primary CC dispatch → if fails, mini-5 direct-tunnel
 async function dispatchWithCascade(kind: Kind): Promise<void> {
   const cfg = storage.getCronConfig();
@@ -262,6 +269,29 @@ async function tick(): Promise<void> {
     dispatchWithCascade(kind).catch((err) => {
       console.error(`[auto-resume] ${kind} dispatch threw:`, err?.message ?? err);
     });
+  }
+
+  // Consolidation cron — 5th lane, separate from Explorer/Executor caps.
+  // Directly POSTs to CC /api/tasks instead of going through dispatchWithCascade.
+  if (cfg.consolidation_cron_enabled) {
+    const consolidationElapsed = now - lastDispatchAt.consolidation;
+    if (consolidationElapsed >= minGapMs) {
+      const intervalHours: number = cfg.consolidation_cron_interval_hours;
+      const lastRunAt: string | null = cfg.consolidation_last_run_at ?? null;
+      if (isConsolidationDue(intervalHours, lastRunAt)) {
+        lastDispatchAt.consolidation = now;
+        console.log(`[consolidation-cron] dispatching to CC (interval ${intervalHours}h)`);
+        dispatchConsolidationToCC().then((result) => {
+          if (result.ok) {
+            console.log(`[consolidation-cron] task dispatched task_id=${result.task_id}`);
+          } else {
+            console.error(`[consolidation-cron] dispatch failed: ${result.error}`);
+          }
+        }).catch((err) => {
+          console.error("[consolidation-cron] dispatch threw:", err?.message ?? err);
+        });
+      }
+    }
   }
 }
 

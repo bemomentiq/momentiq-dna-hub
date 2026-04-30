@@ -8,6 +8,7 @@ import { storage } from "../storage";
 import { isDirectExecutor, spawnDirectAgent, pollDirectRun, reapDeadDirectRuns, DIRECT_TARGETS, type DirectExecutor } from "./direct-dispatch";
 import { dispatchWithCascade } from "./cascade-dispatch";
 import { buildFluidLoopContext } from "./fluid-loop";
+import { dispatchConsolidationToCC } from "./consolidation";
 
 // ============ Briefing builders ============
 
@@ -1162,5 +1163,45 @@ export function registerFleetRoutes(app: Express) {
     const cfg = storage.getCronConfig();
     const out = await reapDeadDirectRuns({ cc_api_url: cfg.cc_api_url, cc_api_key: cfg.cc_api_key });
     res.json(out);
+  });
+
+  // ==================== CONSOLIDATION CRON ====================
+  // Manual "dispatch now" trigger for the consolidation cron lane.
+  // Also serves as the cron config GET/PATCH surface for consolidation settings.
+  app.post("/api/consolidation/dispatch-now", async (_req, res) => {
+    const result = await dispatchConsolidationToCC();
+    res.json(result);
+  });
+
+  app.get("/api/consolidation/config", (_req, res) => {
+    const cfg = storage.getCronConfig();
+    res.json({
+      enabled: Boolean(cfg.consolidation_cron_enabled),
+      interval_hours: cfg.consolidation_cron_interval_hours,
+      briefing_gist: cfg.consolidation_briefing_gist,
+      last_run_at: cfg.consolidation_last_run_at ?? null,
+      last_cc_task_id: cfg.consolidation_last_cc_task_id ?? null,
+    });
+  });
+
+  app.patch("/api/consolidation/config", (req, res) => {
+    const body = z.object({
+      enabled: z.boolean().optional(),
+      interval_hours: z.number().int().min(1).max(24).optional(),
+      briefing_gist: z.string().url().optional(),
+    }).parse(req.body);
+    const updates: Parameters<typeof storage.updateCronConfig>[0] = {};
+    if (body.enabled !== undefined) updates.consolidation_cron_enabled = body.enabled;
+    if (body.interval_hours !== undefined) updates.consolidation_cron_interval_hours = body.interval_hours;
+    if (body.briefing_gist !== undefined) updates.consolidation_briefing_gist = body.briefing_gist;
+    storage.updateCronConfig(updates);
+    const cfg = storage.getCronConfig();
+    res.json({
+      enabled: Boolean(cfg.consolidation_cron_enabled),
+      interval_hours: cfg.consolidation_cron_interval_hours,
+      briefing_gist: cfg.consolidation_briefing_gist,
+      last_run_at: cfg.consolidation_last_run_at ?? null,
+      last_cc_task_id: cfg.consolidation_last_cc_task_id ?? null,
+    });
   });
 }

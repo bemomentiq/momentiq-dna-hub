@@ -1,3 +1,4 @@
+import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import {
@@ -23,6 +24,7 @@ import {
   ExternalLink,
   Baby,
   Bug,
+  RefreshCw,
 } from "lucide-react";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -92,6 +94,14 @@ type TestDebugRun = {
   findings_count: number | null;
   started_at: string;
   finished_at: string | null;
+};
+
+type ConsolidationConfig = {
+  enabled: boolean;
+  interval_hours: number;
+  briefing_gist: string;
+  last_run_at: string | null;
+  last_cc_task_id: number | null;
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -294,6 +304,38 @@ export default function Autonomy() {
     refetchInterval: 30_000,
   });
 
+  const { data: consolidationCfg, refetch: refetchConsolidation } = useQuery<ConsolidationConfig>({
+    queryKey: ["/api/consolidation/config"],
+    refetchInterval: 30_000,
+  });
+
+  const [consolidationDispatching, setConsolidationDispatching] = React.useState(false);
+  const [consolidationLastResult, setConsolidationLastResult] = React.useState<{ ok: boolean; task_id?: number; error?: string } | null>(null);
+
+  async function handleDispatchNow() {
+    setConsolidationDispatching(true);
+    setConsolidationLastResult(null);
+    try {
+      const r = await fetch("/api/consolidation/dispatch-now", { method: "POST" });
+      const j = await r.json();
+      setConsolidationLastResult(j);
+    } catch (err: any) {
+      setConsolidationLastResult({ ok: false, error: err?.message ?? "Network error" });
+    } finally {
+      setConsolidationDispatching(false);
+      refetchConsolidation();
+    }
+  }
+
+  async function patchConsolidation(updates: Partial<{ enabled: boolean; interval_hours: number }>) {
+    await fetch("/api/consolidation/config", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    });
+    refetchConsolidation();
+  }
+
   const recentPrs = recentPrsData?.prs ?? [];
 
   // PRs merged in last 24h
@@ -347,7 +389,7 @@ export default function Autonomy() {
       </div>
 
       {/* ── Lane Status Cards ────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
         <LaneStatusCard
           lane="Explorer"
           icon={<Brain className="h-5 w-5" />}
@@ -387,6 +429,16 @@ export default function Autonomy() {
           totalRuns={testDebugRuns.length}
           inFlight={testDebugRuns.filter((r) => r.status === "running").length}
           description="Runs E2E smoke probes against deployed surfaces every 4 hours. Files GitHub issues for regressions found."
+        />
+        <LaneStatusCard
+          lane="Consolidation"
+          icon={<RefreshCw className="h-5 w-5" />}
+          color="border-violet-500/30"
+          lastRunStatus={consolidationCfg?.last_run_at ? "completed" : undefined}
+          lastRunAt={consolidationCfg?.last_run_at ?? undefined}
+          totalRuns={consolidationCfg?.last_cc_task_id ? 1 : 0}
+          inFlight={0}
+          description={`Posts DNA consolidation briefing to CC every ${consolidationCfg?.interval_hours ?? 1}h. Dedupes from-explorer-* issues into a 6-phase hierarchy.`}
         />
       </div>
 
@@ -610,6 +662,89 @@ export default function Autonomy() {
             ))}
           </ul>
         )}
+      </section>
+
+      {/* ── Consolidation Cron Settings ────────────────────────────────────── */}
+      <section className="rounded-xl border border-violet-500/30 bg-card p-5 mt-6">
+        <h2 className="font-semibold text-sm mb-4 flex items-center gap-2">
+          <RefreshCw className="h-4 w-4 text-violet-500" />
+          Consolidation Cron
+          <span className="text-xs font-normal text-muted-foreground">
+            (5th lane — CC-dispatched, no local runner needed)
+          </span>
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Enable toggle */}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Enabled</span>
+            <button
+              onClick={() => patchConsolidation({ enabled: !consolidationCfg?.enabled })}
+              className={cn(
+                "text-xs px-3 py-1.5 rounded-md border font-medium transition-colors",
+                consolidationCfg?.enabled
+                  ? "bg-violet-500/15 border-violet-500/30 text-violet-700 dark:text-violet-300"
+                  : "bg-muted border-border text-muted-foreground",
+              )}
+            >
+              {consolidationCfg?.enabled ? "ON" : "OFF"}
+            </button>
+          </div>
+          {/* Interval */}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Interval (hours)
+            </span>
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                min={1}
+                max={24}
+                step={1}
+                value={consolidationCfg?.interval_hours ?? 1}
+                onChange={(e) => patchConsolidation({ interval_hours: parseInt(e.target.value, 10) })}
+                className="w-full accent-violet-500"
+              />
+              <span className="text-xs tabular-nums font-mono w-6 text-right">{consolidationCfg?.interval_hours ?? 1}</span>
+            </div>
+          </div>
+          {/* Last run */}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Last run</span>
+            <span className="text-xs text-foreground">
+              {consolidationCfg?.last_run_at
+                ? formatRelative(consolidationCfg.last_run_at)
+                : <span className="italic text-muted-foreground">never</span>}
+            </span>
+            {consolidationCfg?.last_cc_task_id && (
+              <span className="text-[10px] text-muted-foreground font-mono">
+                CC task #{consolidationCfg.last_cc_task_id}
+              </span>
+            )}
+          </div>
+          {/* Dispatch now */}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Manual trigger</span>
+            <button
+              onClick={handleDispatchNow}
+              disabled={consolidationDispatching}
+              className="text-xs px-3 py-1.5 rounded-md border border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-300 font-medium hover:bg-violet-500/20 transition-colors disabled:opacity-50"
+            >
+              {consolidationDispatching ? "Dispatching…" : "Dispatch now"}
+            </button>
+            {consolidationLastResult && (
+              <span
+                className={cn(
+                  "text-[10px] font-mono",
+                  consolidationLastResult.ok ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400",
+                )}
+              >
+                {consolidationLastResult.ok
+                  ? `✓ task #${consolidationLastResult.task_id}`
+                  : `✗ ${consolidationLastResult.error}`}
+              </span>
+            )}
+          </div>
+        </div>
       </section>
     </Layout>
   );
