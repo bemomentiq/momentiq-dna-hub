@@ -17,6 +17,8 @@ type Kind = "explorer" | "executor" | "audit" | "test_debug" | "consolidation";
 
 const lastDispatchAt: Record<Kind, number> = { explorer: 0, executor: 0, audit: 0, test_debug: 0, consolidation: 0 };
 
+let consolidationDispatching = false;
+
 async function inFlightCount(kind: Kind): Promise<number> {
   if (kind === "explorer") {
     return storage.listRuns(50).filter((r) => r.status === "running" || r.status === "queued" || r.status === "planning").length;
@@ -29,9 +31,8 @@ async function inFlightCount(kind: Kind): Promise<number> {
     return storage.listFleetRuns({ kind: "test_debug_cron", status: "running" }).length
       + storage.listFleetRuns({ kind: "test_debug_cron", status: "queued" }).length;
   }
-  // Consolidation dispatches externally to CC and returns immediately — always 0 in-flight
   if (kind === "consolidation") {
-    return 0;
+    return consolidationDispatching ? 1 : 0;
   }
   return storage.listFleetRuns({ kind: "executor_cron", status: "running" }).length
     + storage.listFleetRuns({ kind: "executor_cron", status: "queued" }).length
@@ -176,13 +177,17 @@ async function dispatchConsolidation(): Promise<{ ok: boolean; run_id?: number; 
 
 // Cascade: primary CC dispatch → if fails, mini-5 direct-tunnel
 async function dispatchWithCascade(kind: Kind): Promise<void> {
-  // Consolidation dispatches directly to CC (fire-and-forget) — no fleet cascade needed
   if (kind === "consolidation") {
-    const r = await dispatchConsolidation();
-    if (r.ok) {
-      console.log(`[auto-resume] consolidation dispatched cc_task_id=${r.run_id}`);
-    } else {
-      console.error(`[auto-resume] consolidation dispatch failed: ${r.error}`);
+    consolidationDispatching = true;
+    try {
+      const r = await dispatchConsolidation();
+      if (r.ok) {
+        console.log(`[auto-resume] consolidation dispatched cc_task_id=${r.run_id}`);
+      } else {
+        console.error(`[auto-resume] consolidation dispatch failed: ${r.error}`);
+      }
+    } finally {
+      consolidationDispatching = false;
     }
     return;
   }
