@@ -8,6 +8,7 @@ import { storage } from "../storage";
 import { isDirectExecutor, spawnDirectAgent, pollDirectRun, reapDeadDirectRuns, DIRECT_TARGETS, type DirectExecutor } from "./direct-dispatch";
 import { dispatchWithCascade } from "./cascade-dispatch";
 import { buildFluidLoopContext } from "./fluid-loop";
+import { dispatchConsolidationToCC } from "./consolidation";
 
 // ============ Briefing builders ============
 
@@ -1162,5 +1163,48 @@ export function registerFleetRoutes(app: Express) {
     const cfg = storage.getCronConfig();
     const out = await reapDeadDirectRuns({ cc_api_url: cfg.cc_api_url, cc_api_key: cfg.cc_api_key });
     res.json(out);
+  });
+
+  // ==================== CONSOLIDATION CRON (Lane 5) ====================
+  // Dispatch a consolidation briefing immediately to CC (bypasses interval gate).
+  // Used by the UI "Dispatch now" button and for testing.
+  app.post("/api/consolidation/dispatch-now", async (_req, res) => {
+    const result = await dispatchConsolidationToCC();
+    if (!result.ok) {
+      return void res.status(502).json(result);
+    }
+    res.json(result);
+  });
+
+  // GET consolidation status (last run info for the UI panel)
+  app.get("/api/consolidation/status", (_req, res) => {
+    const cfg = storage.getCronConfig() as any;
+    res.json({
+      enabled: !!cfg.consolidation_cron_enabled,
+      interval_hours: cfg.consolidation_cron_interval_hours ?? 1,
+      last_run_at: cfg.consolidation_last_run_at ?? null,
+      last_cc_task_id: cfg.consolidation_last_cc_task_id ?? null,
+      last_mini_idx: cfg.consolidation_last_mini_idx ?? 0,
+      briefing_gist: cfg.consolidation_briefing_gist ?? null,
+    });
+  });
+
+  // PATCH consolidation config
+  app.patch("/api/consolidation/config", (req, res) => {
+    const body = z.object({
+      enabled: z.boolean().optional(),
+      interval_hours: z.number().int().min(1).max(24).optional(),
+    }).parse(req.body);
+    const updates: any = {};
+    if (body.enabled !== undefined) updates.consolidation_cron_enabled = body.enabled;
+    if (body.interval_hours !== undefined) updates.consolidation_cron_interval_hours = body.interval_hours;
+    storage.updateCronConfig(updates);
+    const cfg = storage.getCronConfig() as any;
+    res.json({
+      enabled: !!cfg.consolidation_cron_enabled,
+      interval_hours: cfg.consolidation_cron_interval_hours ?? 1,
+      last_run_at: cfg.consolidation_last_run_at ?? null,
+      last_cc_task_id: cfg.consolidation_last_cc_task_id ?? null,
+    });
   });
 }

@@ -7,6 +7,7 @@
 // Idempotent: skips if a dispatch happened in the last auto_resume_min_gap_sec.
 
 import { storage } from "../storage";
+import { dispatchConsolidationToCC } from "./consolidation";
 
 const HUB_BASE = process.env.NODE_ENV === "production"
   ? "https://momentiq-dna-hub.up.railway.app/port/5000"
@@ -262,6 +263,21 @@ async function tick(): Promise<void> {
     dispatchWithCascade(kind).catch((err) => {
       console.error(`[auto-resume] ${kind} dispatch threw:`, err?.message ?? err);
     });
+  }
+
+  // ── Consolidation Cron (Lane 5) ──────────────────────────────────────────
+  // Interval-gated: fire at most once per consolidation_cron_interval_hours.
+  if ((cfg as any).consolidation_cron_enabled) {
+    const intervalMs = ((cfg as any).consolidation_cron_interval_hours ?? 1) * 3600 * 1000;
+    const lastRunAt = (cfg as any).consolidation_last_run_at;
+    const lastAt = lastRunAt ? new Date(lastRunAt).getTime() : 0;
+    if (now - lastAt >= intervalMs) {
+      console.log(`[consolidation-cron] dispatching to CC (interval ${(cfg as any).consolidation_cron_interval_hours ?? 1}h)`);
+      dispatchConsolidationToCC().catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error("[consolidation-cron] dispatch failed:", message);
+      });
+    }
   }
 }
 
