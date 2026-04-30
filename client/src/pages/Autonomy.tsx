@@ -21,9 +21,8 @@ import {
   Clock,
   Sparkles,
   ExternalLink,
+  Baby,
   Bug,
-  GitPullRequest,
-  Activity,
 } from "lucide-react";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -37,29 +36,7 @@ type AutonomyStatus = {
     explorer_max: number;
     executor_max: number;
   };
-  test_debug: {
-    enabled: boolean;
-    interval_hours: number;
-    last_run_at: string | null;
-    last_status: string | null;
-    last_findings_count: number | null;
-  };
-  pr_babysitter: {
-    enabled: boolean;
-    last_run_at: string | null;
-    last_status: string | null;
-    last_pr_number: number | null;
-  };
   ts: string;
-};
-
-type CompanionSignals = {
-  readiness: { category: string; completion_pct: number; blocked_items: string[] }[] | null;
-  roadmapState: {
-    current_phase: string;
-    phases: { id: string; title: string; status: string; progress_pct: number }[];
-    next_milestone: string;
-  } | null;
 };
 
 type TimelineEntry = {
@@ -95,6 +72,26 @@ type MergedPr = {
 
 type GhIssuesResponse = {
   issues: { number: number; state: string; repo: string }[];
+};
+
+type PrBabysitterRun = {
+  id: number;
+  status: string;
+  trigger: string;
+  repo: string;
+  pr_number: number;
+  started_at: string;
+  finished_at: string | null;
+};
+
+type TestDebugRun = {
+  id: number;
+  status: string;
+  trigger: string;
+  surfaces_json: string;
+  findings_count: number | null;
+  started_at: string;
+  finished_at: string | null;
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -191,6 +188,74 @@ function KpiCard({
   );
 }
 
+// ── Lane status card ─────────────────────────────────────────────────────────
+
+function LaneStatusCard({
+  lane,
+  icon,
+  color,
+  lastRunStatus,
+  lastRunAt,
+  totalRuns,
+  inFlight,
+  description,
+}: {
+  lane: string;
+  icon: React.ReactNode;
+  color: string;
+  lastRunStatus?: string;
+  lastRunAt?: string;
+  totalRuns: number;
+  inFlight: number;
+  description: string;
+}) {
+  const StatusIcon =
+    lastRunStatus === "completed"
+      ? CheckCircle2
+      : lastRunStatus === "failed"
+      ? XCircle
+      : lastRunStatus === "running"
+      ? Sparkles
+      : Clock;
+
+  const statusTone =
+    lastRunStatus === "completed"
+      ? "text-emerald-600 dark:text-emerald-400"
+      : lastRunStatus === "failed"
+      ? "text-rose-600 dark:text-rose-400"
+      : lastRunStatus === "running"
+      ? "text-amber-600 dark:text-amber-400"
+      : "text-muted-foreground";
+
+  return (
+    <div className={cn("rounded-xl border bg-card p-5 flex flex-col gap-3", color)}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground opacity-70">{icon}</span>
+          <span className="text-sm font-semibold">{lane}</span>
+        </div>
+        {inFlight > 0 && (
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 font-medium">
+            {inFlight} running
+          </span>
+        )}
+      </div>
+      <p className="text-[11px] text-muted-foreground leading-snug">{description}</p>
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span className="tabular-nums">{totalRuns} total runs</span>
+        {lastRunStatus && (
+          <span className={cn("flex items-center gap-1 font-medium", statusTone)}>
+            <StatusIcon className="h-3 w-3" />
+            {lastRunStatus}
+            {lastRunAt && <span className="font-normal opacity-70 ml-0.5">· {formatRelative(lastRunAt)}</span>}
+          </span>
+        )}
+        {!lastRunStatus && <span className="italic opacity-60">no runs yet</span>}
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ────────────────────────────────────────────────────────────────
 
 export default function Autonomy() {
@@ -219,9 +284,14 @@ export default function Autonomy() {
     refetchInterval: 60_000,
   });
 
-  const { data: companionSignals } = useQuery<CompanionSignals>({
-    queryKey: ["/api/companion-signals"],
-    refetchInterval: 120_000,
+  const { data: prBabysitterRuns = [] } = useQuery<PrBabysitterRun[]>({
+    queryKey: ["/api/pr-babysitter/runs"],
+    refetchInterval: 30_000,
+  });
+
+  const { data: testDebugRuns = [] } = useQuery<TestDebugRun[]>({
+    queryKey: ["/api/test-debug/runs"],
+    refetchInterval: 30_000,
   });
 
   const recentPrs = recentPrsData?.prs ?? [];
@@ -276,107 +346,48 @@ export default function Autonomy() {
         />
       </div>
 
-      {/* ── New lanes: PR Babysitter + Test-Debug + Companion Signals ────── */}
-      <div className="grid lg:grid-cols-3 gap-4 mb-6">
-        <section className="rounded-xl border border-card-border bg-card p-4">
-          <h3 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-3 flex items-center gap-2">
-            <GitPullRequest className="h-4 w-4 text-sky-500" />
-            PR Babysitter
-            <span className="text-[10px] normal-case font-normal">(event-triggered)</span>
-          </h3>
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Enabled</span>
-              <span className={cn("font-medium", status?.pr_babysitter?.enabled ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>
-                {status?.pr_babysitter?.enabled ? "on" : "off"}
-              </span>
-            </div>
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Last run</span>
-              <span className="text-foreground">{status?.pr_babysitter?.last_run_at ? formatRelative(status.pr_babysitter.last_run_at) : "never"}</span>
-            </div>
-            {status?.pr_babysitter?.last_status && (
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Status</span>
-                <span className={cn("font-medium capitalize", status.pr_babysitter.last_status === "completed" ? "text-emerald-600 dark:text-emerald-400" : status.pr_babysitter.last_status === "failed" ? "text-rose-600 dark:text-rose-400" : "text-amber-600 dark:text-amber-400")}>
-                  {status.pr_babysitter.last_status}
-                </span>
-              </div>
-            )}
-            {status?.pr_babysitter?.last_pr_number && (
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Last PR</span>
-                <span className="font-mono">#{status.pr_babysitter.last_pr_number}</span>
-              </div>
-            )}
-          </div>
-        </section>
-
-        <section className="rounded-xl border border-card-border bg-card p-4">
-          <h3 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-3 flex items-center gap-2">
-            <Bug className="h-4 w-4 text-orange-500" />
-            Test-Debug
-            <span className="text-[10px] normal-case font-normal">(every {status?.test_debug?.interval_hours ?? 4}h)</span>
-          </h3>
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Enabled</span>
-              <span className={cn("font-medium", status?.test_debug?.enabled ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>
-                {status?.test_debug?.enabled ? "on" : "off"}
-              </span>
-            </div>
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Last run</span>
-              <span className="text-foreground">{status?.test_debug?.last_run_at ? formatRelative(status.test_debug.last_run_at) : "never"}</span>
-            </div>
-            {status?.test_debug?.last_status && (
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Status</span>
-                <span className={cn("font-medium capitalize", status.test_debug.last_status === "completed" ? "text-emerald-600 dark:text-emerald-400" : status.test_debug.last_status === "failed" ? "text-rose-600 dark:text-rose-400" : "text-amber-600 dark:text-amber-400")}>
-                  {status.test_debug.last_status}
-                </span>
-              </div>
-            )}
-            {status?.test_debug?.last_findings_count != null && (
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Findings</span>
-                <span className="font-medium">{status.test_debug.last_findings_count}</span>
-              </div>
-            )}
-          </div>
-        </section>
-
-        <section className="rounded-xl border border-card-border bg-card p-4">
-          <h3 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-3 flex items-center gap-2">
-            <Activity className="h-4 w-4 text-violet-500" />
-            Companion signals
-          </h3>
-          {!companionSignals?.readiness ? (
-            <div className="text-xs text-muted-foreground italic">Kalodata unreachable or not configured.</div>
-          ) : (
-            <div className="space-y-1.5">
-              {companionSignals.readiness.slice(0, 5).map((item) => (
-                <div key={item.category} className="flex items-center gap-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[10px] text-muted-foreground truncate">{item.category}</div>
-                    <div className="h-1.5 rounded-full bg-muted mt-0.5 overflow-hidden">
-                      <div
-                        className={cn("h-full rounded-full", item.completion_pct >= 80 ? "bg-emerald-500" : item.completion_pct >= 50 ? "bg-amber-500" : "bg-rose-500")}
-                        style={{ width: `${item.completion_pct}%` }}
-                      />
-                    </div>
-                  </div>
-                  <span className="text-[10px] font-mono shrink-0 text-muted-foreground">{item.completion_pct}%</span>
-                </div>
-              ))}
-              {companionSignals.roadmapState?.current_phase && (
-                <div className="mt-2 pt-2 border-t border-card-border text-[10px] text-muted-foreground">
-                  Phase: <span className="text-foreground font-medium">{companionSignals.roadmapState.current_phase}</span>
-                </div>
-              )}
-            </div>
-          )}
-        </section>
+      {/* ── Lane Status Cards ────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <LaneStatusCard
+          lane="Explorer"
+          icon={<Brain className="h-5 w-5" />}
+          color="border-blue-500/30"
+          lastRunStatus={timeline.find((r) => r.kind === "explorer")?.status}
+          lastRunAt={timeline.find((r) => r.kind === "explorer")?.started_at}
+          totalRuns={timeline.filter((r) => r.kind === "explorer").length}
+          inFlight={status?.in_flight.explorer ?? 0}
+          description="Proposes new tasks: explores the backlog, opens GitHub issues, scores EV, adds items to the draft queue."
+        />
+        <LaneStatusCard
+          lane="Epic Executor"
+          icon={<Cpu className="h-5 w-5" />}
+          color="border-purple-500/30"
+          lastRunStatus={timeline.find((r) => r.kind !== "explorer")?.status}
+          lastRunAt={timeline.find((r) => r.kind !== "explorer")?.started_at}
+          totalRuns={timeline.filter((r) => r.kind !== "explorer").length}
+          inFlight={(status?.in_flight.executor ?? 0) + (status?.in_flight.ad_hoc ?? 0)}
+          description="Executes approved tasks end-to-end: implements features, opens PRs, monitors CI until merged."
+        />
+        <LaneStatusCard
+          lane="PR Babysitter"
+          icon={<Baby className="h-5 w-5" />}
+          color="border-orange-500/30"
+          lastRunStatus={prBabysitterRuns[0]?.status}
+          lastRunAt={prBabysitterRuns[0]?.started_at}
+          totalRuns={prBabysitterRuns.length}
+          inFlight={prBabysitterRuns.filter((r) => r.status === "running").length}
+          description="Monitors open PRs for CI failures. Triggered by GitHub webhook on check_run events — dispatches fixes automatically."
+        />
+        <LaneStatusCard
+          lane="Test Debug"
+          icon={<Bug className="h-5 w-5" />}
+          color="border-teal-500/30"
+          lastRunStatus={testDebugRuns[0]?.status}
+          lastRunAt={testDebugRuns[0]?.started_at}
+          totalRuns={testDebugRuns.length}
+          inFlight={testDebugRuns.filter((r) => r.status === "running").length}
+          description="Runs E2E smoke probes against deployed surfaces every 4 hours. Files GitHub issues for regressions found."
+        />
       </div>
 
       {/* ── Stacked area chart — in-flight over last 6h ─────────────────── */}
