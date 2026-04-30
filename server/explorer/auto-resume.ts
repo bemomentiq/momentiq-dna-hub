@@ -7,16 +7,18 @@
 // Idempotent: skips if a dispatch happened in the last auto_resume_min_gap_sec.
 
 import { storage } from "../storage";
+import { dispatchConsolidationToCC } from "./consolidation";
 
 const HUB_BASE = process.env.NODE_ENV === "production"
   ? "https://momentiq-dna-hub.up.railway.app/port/5000"
   : "http://localhost:5000";
 
-type Kind = "explorer" | "executor" | "audit" | "test_debug";
+type Kind = "explorer" | "executor" | "audit" | "test_debug" | "consolidation";
 
-const lastDispatchAt: Record<Kind, number> = { explorer: 0, executor: 0, audit: 0, test_debug: 0 };
+const lastDispatchAt: Record<Kind, number> = { explorer: 0, executor: 0, audit: 0, test_debug: 0, consolidation: 0 };
 
 async function inFlightCount(kind: Kind): Promise<number> {
+  if (kind === "consolidation") return 0; // CC-dispatched; no local fleet run to count
   if (kind === "explorer") {
     return storage.listRuns(50).filter((r) => r.status === "running" || r.status === "queued" || r.status === "planning").length;
   }
@@ -211,7 +213,25 @@ async function tick(): Promise<void> {
   const now = Date.now();
   const minGapMs = (cfg.auto_resume_min_gap_sec ?? 30) * 1000;
 
-  for (const kind of ["explorer", "executor", "audit", "test_debug"] as Kind[]) {
+  for (const kind of ["explorer", "executor", "audit", "test_debug", "consolidation"] as Kind[]) {
+    // Consolidation is handled separately — it dispatches to CC, not via the cascade
+    if (kind === "consolidation") {
+      if (!(cfg as any).consolidation_cron_enabled) continue;
+      const intervalMs = ((cfg as any).consolidation_cron_interval_hours ?? 1) * 3600 * 1000;
+      const lastAt = (cfg as any).consolidation_last_run_at
+        ? new Date((cfg as any).consolidation_last_run_at).getTime()
+        : 0;
+      if (now - lastAt < intervalMs) continue;
+      const elapsed = now - lastDispatchAt.consolidation;
+      if (elapsed < minGapMs) continue;
+      lastDispatchAt.consolidation = now;
+      console.log(`[auto-resume] consolidation dispatching to CC (interval=${((cfg as any).consolidation_cron_interval_hours ?? 1)}h)`);
+      dispatchConsolidationToCC().catch((err) => {
+        console.error(`[auto-resume] consolidation dispatch threw:`, err?.message ?? err);
+      });
+      continue;
+    }
+
     const flagKey = kind === "explorer" ? "auto_resume_explorer"
       : kind === "audit" ? "auto_resume_audit"
       : kind === "test_debug" ? "auto_resume_test_debug"
