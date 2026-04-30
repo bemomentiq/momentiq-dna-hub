@@ -85,6 +85,18 @@ type ConsolidationStatus = {
   last_cc_task_id: number | null;
 };
 
+type OrganizerState = {
+  enabled: boolean;
+  interval_minutes: number;
+  last_run_at: string | null;
+  last_stats: Record<string, unknown> | null;
+  explorer_paused_reason: string | null;
+  explorer_max_open_issues: number;
+  explorer_dynamic_pause_enabled: boolean;
+  explorer_novelty_floor: number;
+  pause_decision: { pause: boolean; reason?: string };
+};
+
 type PrBabysitterRun = {
   id: number;
   status: string;
@@ -305,9 +317,16 @@ export default function Autonomy() {
     refetchInterval: 30_000,
   });
 
+  const { data: organizerState } = useQuery<OrganizerState>({
+    queryKey: ["/api/organizer/state"],
+    refetchInterval: 15_000,
+  });
+
   const consolidationStatus = status?.consolidation ?? null;
   const [consolidationDispatching, setConsolidationDispatching] = React.useState(false);
   const [consolidationDispatchResult, setConsolidationDispatchResult] = React.useState<{ ok: boolean; cc_task_id?: number; executor?: string; error?: string } | null>(null);
+  const [organizerDispatching, setOrganizerDispatching] = React.useState(false);
+  const [organizerDispatchResult, setOrganizerDispatchResult] = React.useState<{ ok: boolean; cc_task_id?: number; executor?: string; error?: string } | null>(null);
 
   async function handleConsolidationDispatchNow() {
     setConsolidationDispatching(true);
@@ -320,6 +339,27 @@ export default function Autonomy() {
       setConsolidationDispatchResult({ ok: false, error: err?.message ?? String(err) });
     } finally {
       setConsolidationDispatching(false);
+    }
+  }
+
+  async function handleOrganizerDispatch(kind: "full_backlog" | "recent_only") {
+    setOrganizerDispatching(true);
+    setOrganizerDispatchResult(null);
+    try {
+      const scope = kind === "recent_only"
+        ? { kind, recent_since_iso: new Date(Date.now() - 3_600_000).toISOString() }
+        : { kind };
+      const r = await fetch("/api/organizer/dispatch-now", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope }),
+      });
+      const j = await r.json();
+      setOrganizerDispatchResult(j);
+    } catch (err: any) {
+      setOrganizerDispatchResult({ ok: false, error: err?.message ?? String(err) });
+    } finally {
+      setOrganizerDispatching(false);
     }
   }
 
@@ -673,6 +713,147 @@ export default function Autonomy() {
           Fires every {consolidationStatus?.interval_hours ?? 1}h. Fetches the consolidation briefing gist and dispatches a CC task titled{" "}
           <span className="font-mono">[DNA-CONSOLIDATION-CRON]</span>. Round-robins execution across mini-1..5.
           Configure via Settings → Cron Config.
+        </p>
+      </section>
+
+      {/* ── Backlog Organizer Cron panel ────────────────────────────────── */}
+      <section className="rounded-xl border border-emerald-500/30 bg-card p-5 mb-6">
+        <h2 className="font-semibold text-sm mb-4 flex items-center gap-2">
+          <Layers className="h-4 w-4 text-emerald-500" />
+          Backlog Organizer Cron
+          <span className="text-xs font-normal text-muted-foreground">(6th autonomous lane)</span>
+          {organizerState?.enabled ? (
+            <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 font-medium">
+              Enabled
+            </span>
+          ) : (
+            <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border font-medium">
+              Disabled
+            </span>
+          )}
+        </h2>
+        <div className="flex flex-wrap gap-6 text-xs text-muted-foreground mb-4">
+          <div className="flex flex-col gap-1">
+            <span className="uppercase tracking-wide text-[10px] font-medium">Interval</span>
+            <span className="text-foreground font-semibold tabular-nums">
+              {organizerState?.interval_minutes ?? 30}min
+            </span>
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="uppercase tracking-wide text-[10px] font-medium">Last run</span>
+            <span className="text-foreground font-semibold tabular-nums">
+              {organizerState?.last_run_at ? formatRelative(organizerState.last_run_at) : "never"}
+            </span>
+          </div>
+          {organizerState?.last_stats && (
+            <div className="flex flex-col gap-1">
+              <span className="uppercase tracking-wide text-[10px] font-medium">Last stats</span>
+              <span className="text-foreground font-mono text-[10px]">
+                {JSON.stringify(organizerState.last_stats).slice(0, 80)}
+              </span>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            onClick={() => handleOrganizerDispatch("full_backlog")}
+            disabled={organizerDispatching}
+            className={cn(
+              "flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors",
+              organizerDispatching
+                ? "opacity-60 cursor-not-allowed bg-muted border-border text-muted-foreground"
+                : "bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20",
+            )}
+          >
+            <Play className="h-3 w-3" />
+            {organizerDispatching ? "Dispatching..." : "Dispatch full backlog"}
+          </button>
+          <button
+            onClick={() => handleOrganizerDispatch("recent_only")}
+            disabled={organizerDispatching}
+            className={cn(
+              "flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors",
+              organizerDispatching
+                ? "opacity-60 cursor-not-allowed bg-muted border-border text-muted-foreground"
+                : "bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20",
+            )}
+          >
+            <Play className="h-3 w-3" />
+            Dispatch recent-only (1h)
+          </button>
+          {organizerDispatchResult && (
+            <span
+              className={cn(
+                "text-xs",
+                organizerDispatchResult.ok ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400",
+              )}
+            >
+              {organizerDispatchResult.ok
+                ? `Dispatched CC task #${organizerDispatchResult.cc_task_id} on ${organizerDispatchResult.executor}`
+                : `Error: ${organizerDispatchResult.error}`}
+            </span>
+          )}
+        </div>
+        <p className="text-[11px] text-muted-foreground mt-3 leading-snug">
+          Fires every {organizerState?.interval_minutes ?? 30}min. Dedupes issues, ratifies phase trackers, patches missing briefing H2s, suggests orphan parents.
+          Round-robins across mini-1..5 via CC dispatch.
+        </p>
+      </section>
+
+      {/* ── Explorer Pause Controls panel ───────────────────────────────── */}
+      <section className="rounded-xl border border-amber-500/30 bg-card p-5 mb-6">
+        <h2 className="font-semibold text-sm mb-4 flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 text-amber-500" />
+          Explorer Pause Controls
+          {organizerState?.explorer_paused_reason ? (
+            <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 font-medium">
+              Paused
+            </span>
+          ) : (
+            <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 font-medium">
+              Running
+            </span>
+          )}
+        </h2>
+        {organizerState?.explorer_paused_reason && (
+          <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+            <span className="font-semibold">Paused: </span>{organizerState.explorer_paused_reason}
+          </div>
+        )}
+        <div className="flex flex-wrap gap-6 text-xs text-muted-foreground mb-2">
+          <div className="flex flex-col gap-1">
+            <span className="uppercase tracking-wide text-[10px] font-medium">Open issue cap</span>
+            <span className="text-foreground font-semibold tabular-nums">
+              {organizerState?.explorer_max_open_issues ?? 1000}
+            </span>
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="uppercase tracking-wide text-[10px] font-medium">Dynamic pause</span>
+            <span className="text-foreground font-semibold">
+              {organizerState?.explorer_dynamic_pause_enabled ? "Enabled" : "Disabled"}
+            </span>
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="uppercase tracking-wide text-[10px] font-medium">Novelty floor</span>
+            <span className="text-foreground font-semibold tabular-nums">
+              {organizerState?.explorer_novelty_floor ?? 2} items/run
+            </span>
+          </div>
+          {organizerState?.pause_decision && (
+            <div className="flex flex-col gap-1">
+              <span className="uppercase tracking-wide text-[10px] font-medium">Decision</span>
+              <span className={cn(
+                "font-semibold",
+                organizerState.pause_decision.pause ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400",
+              )}>
+                {organizerState.pause_decision.pause ? "Would pause now" : "Clear to run"}
+              </span>
+            </div>
+          )}
+        </div>
+        <p className="text-[11px] text-muted-foreground mt-2 leading-snug">
+          Explorer pauses automatically when open task count ≥ cap OR when the last 2 runs produced fewer than {organizerState?.explorer_novelty_floor ?? 2} × 2 net-new items.
+          Configure thresholds via Settings → Cron Config.
         </p>
       </section>
 

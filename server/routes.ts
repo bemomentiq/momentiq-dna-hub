@@ -14,6 +14,7 @@ import { startAutoResumer, startReaper, lastReapedCount, lastReapedAt } from "./
 import { computeCascadeStats } from "./explorer/cascade-dispatch";
 import { fetchKalodataSignals } from "./explorer/kalodata-signals";
 import { dispatchConsolidationToCC } from "./explorer/consolidation";
+import { dispatchOrganizerToCC, computeExplorerPauseDecision, type OrganizerScope } from "./explorer/backlog-organizer";
 import { storage } from "./storage";
 import { buildDigestMarkdown } from "./digest";
 
@@ -505,6 +506,44 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return void res.status(500).json({ error: result.error });
       }
       return void res.json({ ok: true, cc_task_id: result.cc_task_id, executor: result.executor });
+    } catch (err: any) {
+      return void res.status(500).json({ error: err?.message ?? String(err) });
+    }
+  });
+
+  // ── Backlog Organizer (6th lane) ─────────────────────────────────────────
+  // POST /api/organizer/dispatch-now — manual on-demand dispatch
+  app.post("/api/organizer/dispatch-now", async (req, res) => {
+    try {
+      const scope = (req.body?.scope as OrganizerScope) ?? { kind: "full_backlog" };
+      const result = await dispatchOrganizerToCC(scope);
+      if (!result.ok) {
+        return void res.status(500).json({ error: result.error });
+      }
+      return void res.json({ ok: true, cc_task_id: result.cc_task_id, executor: result.executor });
+    } catch (err: any) {
+      return void res.status(500).json({ error: err?.message ?? String(err) });
+    }
+  });
+
+  // GET /api/organizer/state — current organizer config + last run + pause decision
+  app.get("/api/organizer/state", (_req, res) => {
+    try {
+      const cfg = storage.getCronConfig() as any;
+      const pauseDecision = computeExplorerPauseDecision();
+      return void res.json({
+        enabled: !!cfg.organizer_cron_enabled,
+        interval_minutes: cfg.organizer_cron_interval_minutes ?? 30,
+        last_run_at: cfg.organizer_last_run_at ?? null,
+        last_stats: cfg.organizer_last_stats_json
+          ? (() => { try { return JSON.parse(cfg.organizer_last_stats_json); } catch { return null; } })()
+          : null,
+        explorer_paused_reason: cfg.explorer_paused_reason ?? null,
+        explorer_max_open_issues: cfg.explorer_max_open_issues ?? 1000,
+        explorer_dynamic_pause_enabled: !!cfg.explorer_dynamic_pause_enabled,
+        explorer_novelty_floor: cfg.explorer_novelty_floor ?? 2,
+        pause_decision: pauseDecision,
+      });
     } catch (err: any) {
       return void res.status(500).json({ error: err?.message ?? String(err) });
     }

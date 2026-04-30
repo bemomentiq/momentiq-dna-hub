@@ -167,6 +167,16 @@ function ensureSchema() {
   if (!cHas("consolidation_briefing_gist")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN consolidation_briefing_gist TEXT NOT NULL DEFAULT 'https://gist.githubusercontent.com/Alexelsea/6ccd289190f7fd3c173599de07a48db8/raw/2f43450d8d693e5289429cb7a5de3bb149304716/briefing.md'");
   if (!cHas("consolidation_last_run_at")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN consolidation_last_run_at TEXT");
   if (!cHas("consolidation_last_cc_task_id")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN consolidation_last_cc_task_id INTEGER");
+  // Backlog Organizer cron (6th lane)
+  if (!cHas("organizer_cron_enabled")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN organizer_cron_enabled INTEGER NOT NULL DEFAULT 1");
+  if (!cHas("organizer_cron_interval_minutes")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN organizer_cron_interval_minutes INTEGER NOT NULL DEFAULT 30");
+  if (!cHas("organizer_last_run_at")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN organizer_last_run_at TEXT");
+  if (!cHas("organizer_last_stats_json")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN organizer_last_stats_json TEXT");
+  // Explorer dynamic pause controls
+  if (!cHas("explorer_max_open_issues")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN explorer_max_open_issues INTEGER NOT NULL DEFAULT 1000");
+  if (!cHas("explorer_dynamic_pause_enabled")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN explorer_dynamic_pause_enabled INTEGER NOT NULL DEFAULT 1");
+  if (!cHas("explorer_novelty_floor")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN explorer_novelty_floor INTEGER NOT NULL DEFAULT 2");
+  if (!cHas("explorer_paused_reason")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN explorer_paused_reason TEXT");
   // Bump prior summaries default to 15 if still on legacy default
   sqlite.exec("UPDATE cron_config SET max_prior_summaries = 15 WHERE max_prior_summaries < 15");
   // Fleet runs (executor cron + ad-hoc)
