@@ -53,15 +53,13 @@ export function registerTestDebugRoutes(app: Express) {
 
     try {
       await dispatchWithCascade({
-        kind: "test_debug" as any,
-        run_id: run.id,
-        repo_url: "https://github.com/bemomentiq/momentiq-dna",
+        kind: "executor",
+        runId: run.id,
         briefing,
-        priority: "p2",
-        executor: cfg.executor || "pin-claude",
-        fallback_executor: "pin-codex",
-        model: "claude_opus_4_7",
-        fallback_model: "gpt_5_5",
+        preferredProvider: (cfg.executor || "pin-claude") === "pin-claude" ? "claude" : "codex",
+        hubStatusUrl: `${hubUrl}/api/test-debug/runs/${run.id}`,
+        ccApiUrl: cfg.cc_api_url || process.env.CC_API_URL || "",
+        ccApiKey: cfg.cc_api_key || process.env.CC_API_KEY || "",
       });
       db.prepare("UPDATE test_debug_runs SET status='running' WHERE id=?").run(run.id);
     } catch (err: any) {

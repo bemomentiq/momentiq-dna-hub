@@ -277,11 +277,6 @@ function ensureSchema() {
 ensureSchema();
 
 // ====== EV scoring ======
-// PrOutcome type (stub — populated by AH-10X-01 when that table lands)
-interface PrOutcome {
-  outcome: string;
-  area?: string;
-}
 
 /**
  * Compute the economic expected-value score for a single draft task.

@@ -304,8 +304,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       byArea.get(a)!.push(d);
     }
     const phases: any[] = [];
-    for (const [area, items] of byArea) {
-      const shipped = items.filter((i) => i.status === "shipped").length;
+    for (const [area, items] of Array.from(byArea.entries())) {
+      const shipped = items.filter((i: any) => i.status === "shipped").length;
       const total = items.length;
       const pct = total ? Math.round((shipped / total) * 100) : 0;
       phases.push({
@@ -313,7 +313,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         name: `${area.toUpperCase()} — ${shipped}/${total} shipped (${pct}%)`,
         description: `Live roadmap slice for area:${area}, auto-derived from explorer drafts + reconciled GitHub state.`,
         progress_pct: pct,
-        items: items.slice(0, 50).map((i) => ({
+        items: items.slice(0, 50).map((i: any) => ({
           id: (i as any).gh_issue_number ? `${(i as any).gh_repo}#${(i as any).gh_issue_number}` : `local-${i.id}`,
           title: i.title,
           status: i.status,

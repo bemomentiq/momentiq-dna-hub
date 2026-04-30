@@ -894,7 +894,7 @@ export function registerFleetRoutes(app: Express) {
         error: finalStatus === "failed" ? polled.stderr_tail.slice(-500) : null,
       } as any);
     }
-    res.json({ ok: polled.ok, direct: true, run_id: id, agentId, workdir, ...polled });
+    res.json({ direct: true, run_id: id, agentId, workdir, ...polled });
   });
 
   // ==================== AUDIT CRON DISPATCH ====================
