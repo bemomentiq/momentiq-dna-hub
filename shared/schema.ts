@@ -185,6 +185,16 @@ export const cronConfig = sqliteTable("cron_config", {
   consolidation_briefing_gist: text("consolidation_briefing_gist").notNull().default("https://gist.githubusercontent.com/Alexelsea/6ccd289190f7fd3c173599de07a48db8/raw/2f43450d8d693e5289429cb7a5de3bb149304716/briefing.md"),
   consolidation_last_run_at: text("consolidation_last_run_at"),
   consolidation_last_cc_task_id: integer("consolidation_last_cc_task_id"),
+  // Backlog Organizer cron (6th lane)
+  organizer_cron_enabled: integer("organizer_cron_enabled", { mode: "boolean" }).notNull().default(false),
+  organizer_cron_interval_minutes: integer("organizer_cron_interval_minutes").notNull().default(30),
+  organizer_last_run_at: text("organizer_last_run_at"),
+  organizer_last_stats_json: text("organizer_last_stats_json"),
+  // Explorer dynamic pause controls
+  explorer_max_open_issues: integer("explorer_max_open_issues").notNull().default(1000),
+  explorer_dynamic_pause_enabled: integer("explorer_dynamic_pause_enabled", { mode: "boolean" }).notNull().default(false),
+  explorer_novelty_floor: integer("explorer_novelty_floor").notNull().default(2),
+  explorer_paused_reason: text("explorer_paused_reason"),
 });
 
 export const insertCronConfigSchema = createInsertSchema(cronConfig).omit({ id: true });

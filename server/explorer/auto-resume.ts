@@ -294,7 +294,9 @@ async function tick(): Promise<void> {
         console.log(`[auto-resume] Explorer paused: ${decision.reason}`);
         continue;
       }
-      setExplorerPaused(null);
+      if ((cfg as any).explorer_paused_reason) {
+        setExplorerPaused(null);
+      }
     }
 
     // Executor-specific: back off if queue was drained (consecutive QUEUE_EMPTY pickups)

@@ -148,7 +148,7 @@ export async function dispatchOrganizerToCC(scope: OrganizerScope): Promise<Orga
     const cc_task_id: number = data?.id ?? data?.task?.id;
     storage.updateCronConfig({
       organizer_last_run_at: now,
-    } as any);
+    });
     return { ok: true, cc_task_id, executor };
   } catch (err: any) {
     return { ok: false, error: err?.message ?? String(err) };
@@ -197,7 +197,7 @@ export function computeExplorerPauseDecision(): ExplorerPauseDecision {
 }
 
 export function setExplorerPaused(reason: string | null): void {
-  storage.updateCronConfig({ explorer_paused_reason: reason } as any);
+  storage.updateCronConfig({ explorer_paused_reason: reason });
 }
 
 // Check whether enough time has passed since the last Organizer dispatch.
