@@ -7,14 +7,15 @@
 // Idempotent: skips if a dispatch happened in the last auto_resume_min_gap_sec.
 
 import { storage } from "../storage";
+import { dispatchConsolidationToCC } from "./consolidation";
 
 const HUB_BASE = process.env.NODE_ENV === "production"
   ? "https://momentiq-dna-hub.up.railway.app/port/5000"
   : "http://localhost:5000";
 
-type Kind = "explorer" | "executor" | "audit" | "test_debug";
+type Kind = "explorer" | "executor" | "audit" | "test_debug" | "consolidation";
 
-const lastDispatchAt: Record<Kind, number> = { explorer: 0, executor: 0, audit: 0, test_debug: 0 };
+const lastDispatchAt: Record<Kind, number> = { explorer: 0, executor: 0, audit: 0, test_debug: 0, consolidation: 0 };
 
 async function inFlightCount(kind: Kind): Promise<number> {
   if (kind === "explorer") {
@@ -27,6 +28,10 @@ async function inFlightCount(kind: Kind): Promise<number> {
   if (kind === "test_debug") {
     return storage.listFleetRuns({ kind: "test_debug_cron", status: "running" }).length
       + storage.listFleetRuns({ kind: "test_debug_cron", status: "queued" }).length;
+  }
+  // Consolidation dispatches externally to CC and returns immediately — always 0 in-flight
+  if (kind === "consolidation") {
+    return 0;
   }
   return storage.listFleetRuns({ kind: "executor_cron", status: "running" }).length
     + storage.listFleetRuns({ kind: "executor_cron", status: "queued" }).length
@@ -153,8 +158,35 @@ function isTestDebugDue(intervalHours: number): boolean {
   return elapsedHours >= intervalHours;
 }
 
+// Check whether enough time has passed since the last consolidation dispatch.
+// Gates based on consolidation_last_run_at stored in cron_config (not a fleet_run row).
+function isConsolidationDue(intervalHours: number): boolean {
+  const cfg = storage.getCronConfig() as any;
+  const lastRunAt: string | null = cfg.consolidation_last_run_at ?? null;
+  if (!lastRunAt) return true;
+  const lastAt = new Date(lastRunAt).getTime();
+  const elapsedHours = (Date.now() - lastAt) / (1000 * 60 * 60);
+  return elapsedHours >= intervalHours;
+}
+
+async function dispatchConsolidation(): Promise<{ ok: boolean; run_id?: number; error?: string }> {
+  const r = await dispatchConsolidationToCC();
+  return { ok: r.ok, run_id: r.cc_task_id, error: r.error };
+}
+
 // Cascade: primary CC dispatch → if fails, mini-5 direct-tunnel
 async function dispatchWithCascade(kind: Kind): Promise<void> {
+  // Consolidation dispatches directly to CC (fire-and-forget) — no fleet cascade needed
+  if (kind === "consolidation") {
+    const r = await dispatchConsolidation();
+    if (r.ok) {
+      console.log(`[auto-resume] consolidation dispatched cc_task_id=${r.run_id}`);
+    } else {
+      console.error(`[auto-resume] consolidation dispatch failed: ${r.error}`);
+    }
+    return;
+  }
+
   const cfg = storage.getCronConfig();
   const { primary, fallback } = pickLane(kind);
   const fn = kind === "explorer" ? dispatchExplorer
@@ -211,10 +243,11 @@ async function tick(): Promise<void> {
   const now = Date.now();
   const minGapMs = (cfg.auto_resume_min_gap_sec ?? 30) * 1000;
 
-  for (const kind of ["explorer", "executor", "audit", "test_debug"] as Kind[]) {
+  for (const kind of ["explorer", "executor", "audit", "test_debug", "consolidation"] as Kind[]) {
     const flagKey = kind === "explorer" ? "auto_resume_explorer"
       : kind === "audit" ? "auto_resume_audit"
       : kind === "test_debug" ? "auto_resume_test_debug"
+      : kind === "consolidation" ? "consolidation_cron_enabled"
       : "auto_resume_executor";
     if (!(cfg as any)[flagKey]) continue;
 
@@ -228,6 +261,8 @@ async function tick(): Promise<void> {
       ? ((cfg as any).auto_resume_audit_max ?? 1)
       : kind === "test_debug"
       ? ((cfg as any).auto_resume_test_debug_max ?? 1)
+      : kind === "consolidation"
+      ? 1
       : (cfg.auto_resume_executor_max ?? cfg.auto_resume_max_concurrent ?? 3);
 
     const inFlight = await inFlightCount(kind);
@@ -253,6 +288,15 @@ async function tick(): Promise<void> {
       const intervalHours = (cfg as any).test_debug_interval_hours ?? 4;
       if (!isTestDebugDue(intervalHours)) {
         console.log(`[auto-resume] test_debug not yet due (interval=${intervalHours}h); skipping tick`);
+        continue;
+      }
+    }
+
+    // Consolidation: interval-gated (default 1h)
+    if (kind === "consolidation") {
+      const intervalHours = (cfg as any).consolidation_cron_interval_hours ?? 1;
+      if (!isConsolidationDue(intervalHours)) {
+        console.log(`[auto-resume] consolidation not yet due (interval=${intervalHours}h); skipping tick`);
         continue;
       }
     }

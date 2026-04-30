@@ -13,6 +13,7 @@ import { registerSkillsRoutes } from "./explorer/skills";
 import { startAutoResumer, startReaper, lastReapedCount, lastReapedAt } from "./explorer/auto-resume";
 import { computeCascadeStats } from "./explorer/cascade-dispatch";
 import { fetchKalodataSignals } from "./explorer/kalodata-signals";
+import { dispatchConsolidationToCC } from "./explorer/consolidation";
 import { storage } from "./storage";
 import { buildDigestMarkdown } from "./digest";
 
@@ -292,6 +293,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         last_status: lastPrBabysitter?.status ?? null,
         last_pr_number: lastPrBabysitter?.pr_number ?? null,
       },
+      consolidation: {
+        enabled: !!(cfg as any).consolidation_cron_enabled,
+        interval_hours: (cfg as any).consolidation_cron_interval_hours ?? 1,
+        last_run_at: (cfg as any).consolidation_last_run_at ?? null,
+        last_cc_task_id: (cfg as any).consolidation_last_cc_task_id ?? null,
+      },
       reaper: {
         stale_run_max_age_sec: cfg.stale_run_max_age_sec ?? 2400,
         last_reaped_count: lastReapedCount,
@@ -487,6 +494,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const top10 = allPrs.slice(0, 10);
     recentPrsCache = { data: top10, fetched_at: now };
     res.json({ prs: top10, repos, errors, fetched_at: new Date().toISOString(), cached: false });
+  });
+
+  // ── Consolidation cron (5th lane) ─────────────────────────────────────────
+  // POST /api/consolidation/dispatch-now — manual on-demand dispatch
+  app.post("/api/consolidation/dispatch-now", async (_req, res) => {
+    try {
+      const result = await dispatchConsolidationToCC();
+      if (!result.ok) {
+        return void res.status(500).json({ error: result.error });
+      }
+      return void res.json({ ok: true, cc_task_id: result.cc_task_id, executor: result.executor });
+    } catch (err: any) {
+      return void res.status(500).json({ error: err?.message ?? String(err) });
+    }
   });
 
   // ── Digest endpoint (AH-10X-05) ──────────────────────────────────────────

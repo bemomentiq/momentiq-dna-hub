@@ -161,6 +161,12 @@ function ensureSchema() {
   if (!cHas("companion_site_url")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN companion_site_url TEXT NOT NULL DEFAULT 'https://kalodata-ai-content-platform-t.pplx.app'");
   if (!cHas("epic_mode")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN epic_mode INTEGER NOT NULL DEFAULT 1");
   if (!cHas("gh_webhook_secret")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN gh_webhook_secret TEXT NOT NULL DEFAULT 'dev-bypass'");
+  // Consolidation cron (5th lane)
+  if (!cHas("consolidation_cron_enabled")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN consolidation_cron_enabled INTEGER NOT NULL DEFAULT 0");
+  if (!cHas("consolidation_cron_interval_hours")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN consolidation_cron_interval_hours INTEGER NOT NULL DEFAULT 1");
+  if (!cHas("consolidation_briefing_gist")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN consolidation_briefing_gist TEXT NOT NULL DEFAULT 'https://gist.githubusercontent.com/Alexelsea/6ccd289190f7fd3c173599de07a48db8/raw/2f43450d8d693e5289429cb7a5de3bb149304716/briefing.md'");
+  if (!cHas("consolidation_last_run_at")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN consolidation_last_run_at TEXT");
+  if (!cHas("consolidation_last_cc_task_id")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN consolidation_last_cc_task_id INTEGER");
   // Bump prior summaries default to 15 if still on legacy default
   sqlite.exec("UPDATE cron_config SET max_prior_summaries = 15 WHERE max_prior_summaries < 15");
   // Fleet runs (executor cron + ad-hoc)

@@ -1,3 +1,4 @@
+import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import {
@@ -23,6 +24,8 @@ import {
   ExternalLink,
   Baby,
   Bug,
+  Layers,
+  Play,
 } from "lucide-react";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -36,6 +39,7 @@ type AutonomyStatus = {
     explorer_max: number;
     executor_max: number;
   };
+  consolidation?: ConsolidationStatus;
   ts: string;
 };
 
@@ -72,6 +76,13 @@ type MergedPr = {
 
 type GhIssuesResponse = {
   issues: { number: number; state: string; repo: string }[];
+};
+
+type ConsolidationStatus = {
+  enabled: boolean;
+  interval_hours: number;
+  last_run_at: string | null;
+  last_cc_task_id: number | null;
 };
 
 type PrBabysitterRun = {
@@ -294,6 +305,24 @@ export default function Autonomy() {
     refetchInterval: 30_000,
   });
 
+  const consolidationStatus = status?.consolidation ?? null;
+  const [consolidationDispatching, setConsolidationDispatching] = React.useState(false);
+  const [consolidationDispatchResult, setConsolidationDispatchResult] = React.useState<{ ok: boolean; cc_task_id?: number; executor?: string; error?: string } | null>(null);
+
+  async function handleConsolidationDispatchNow() {
+    setConsolidationDispatching(true);
+    setConsolidationDispatchResult(null);
+    try {
+      const r = await fetch("/api/consolidation/dispatch-now", { method: "POST" });
+      const j = await r.json();
+      setConsolidationDispatchResult(j);
+    } catch (err: any) {
+      setConsolidationDispatchResult({ ok: false, error: err?.message ?? String(err) });
+    } finally {
+      setConsolidationDispatching(false);
+    }
+  }
+
   const recentPrs = recentPrsData?.prs ?? [];
 
   // PRs merged in last 24h
@@ -347,7 +376,7 @@ export default function Autonomy() {
       </div>
 
       {/* ── Lane Status Cards ────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
         <LaneStatusCard
           lane="Explorer"
           icon={<Brain className="h-5 w-5" />}
@@ -387,6 +416,16 @@ export default function Autonomy() {
           totalRuns={testDebugRuns.length}
           inFlight={testDebugRuns.filter((r) => r.status === "running").length}
           description="Runs E2E smoke probes against deployed surfaces every 4 hours. Files GitHub issues for regressions found."
+        />
+        <LaneStatusCard
+          lane="Consolidation"
+          icon={<Layers className="h-5 w-5" />}
+          color="border-violet-500/30"
+          lastRunStatus={consolidationStatus?.last_run_at ? "completed" : undefined}
+          lastRunAt={consolidationStatus?.last_run_at ?? undefined}
+          totalRuns={consolidationStatus?.last_cc_task_id ? 1 : 0}
+          inFlight={0}
+          description={`Dispatches a consolidation briefing to CC every ${consolidationStatus?.interval_hours ?? 1}h. Round-robins across mini-1..5. ${consolidationStatus?.enabled ? "Active." : "Disabled."}`}
         />
       </div>
 
@@ -564,6 +603,78 @@ export default function Autonomy() {
           )}
         </section>
       </div>
+
+      {/* ── Consolidation Cron panel ────────────────────────────────────── */}
+      <section className="rounded-xl border border-violet-500/30 bg-card p-5 mb-6">
+        <h2 className="font-semibold text-sm mb-4 flex items-center gap-2">
+          <Layers className="h-4 w-4 text-violet-500" />
+          Consolidation Cron
+          <span className="text-xs font-normal text-muted-foreground">(5th autonomous lane)</span>
+          {consolidationStatus?.enabled ? (
+            <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 font-medium">
+              Enabled
+            </span>
+          ) : (
+            <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border font-medium">
+              Disabled
+            </span>
+          )}
+        </h2>
+        <div className="flex flex-wrap gap-6 text-xs text-muted-foreground mb-4">
+          <div className="flex flex-col gap-1">
+            <span className="uppercase tracking-wide text-[10px] font-medium">Interval</span>
+            <span className="text-foreground font-semibold tabular-nums">
+              {consolidationStatus?.interval_hours ?? 1}h
+            </span>
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="uppercase tracking-wide text-[10px] font-medium">Last run</span>
+            <span className="text-foreground font-semibold tabular-nums">
+              {consolidationStatus?.last_run_at ? formatRelative(consolidationStatus.last_run_at) : "never"}
+            </span>
+          </div>
+          {consolidationStatus?.last_cc_task_id && (
+            <div className="flex flex-col gap-1">
+              <span className="uppercase tracking-wide text-[10px] font-medium">Last CC task</span>
+              <span className="text-foreground font-semibold tabular-nums">
+                #{consolidationStatus.last_cc_task_id}
+              </span>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleConsolidationDispatchNow}
+            disabled={consolidationDispatching}
+            className={cn(
+              "flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors",
+              consolidationDispatching
+                ? "opacity-60 cursor-not-allowed bg-muted border-border text-muted-foreground"
+                : "bg-violet-500/10 border-violet-500/30 text-violet-700 dark:text-violet-300 hover:bg-violet-500/20",
+            )}
+          >
+            <Play className="h-3 w-3" />
+            {consolidationDispatching ? "Dispatching..." : "Dispatch Now"}
+          </button>
+          {consolidationDispatchResult && (
+            <span
+              className={cn(
+                "text-xs",
+                consolidationDispatchResult.ok ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400",
+              )}
+            >
+              {consolidationDispatchResult.ok
+                ? `Dispatched CC task #${consolidationDispatchResult.cc_task_id} on ${consolidationDispatchResult.executor}`
+                : `Error: ${consolidationDispatchResult.error}`}
+            </span>
+          )}
+        </div>
+        <p className="text-[11px] text-muted-foreground mt-3 leading-snug">
+          Fires every {consolidationStatus?.interval_hours ?? 1}h. Fetches the consolidation briefing gist and dispatches a CC task titled{" "}
+          <span className="font-mono">[DNA-CONSOLIDATION-CRON]</span>. Round-robins execution across mini-1..5.
+          Configure via Settings → Cron Config.
+        </p>
+      </section>
 
       {/* ── Recent merged PRs ─────────────────────────────────────────────── */}
       <section className="rounded-xl border border-card-border bg-card p-5">

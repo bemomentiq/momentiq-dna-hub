@@ -179,6 +179,12 @@ export const cronConfig = sqliteTable("cron_config", {
   companion_site_url: text("companion_site_url").notNull().default("https://kalodata-ai-content-platform-t.pplx.app"),
   epic_mode: integer("epic_mode", { mode: "boolean" }).notNull().default(true),
   gh_webhook_secret: text("gh_webhook_secret").notNull().default("dev-bypass"),
+  // Consolidation cron (5th lane)
+  consolidation_cron_enabled: integer("consolidation_cron_enabled", { mode: "boolean" }).notNull().default(false),
+  consolidation_cron_interval_hours: integer("consolidation_cron_interval_hours").notNull().default(1),
+  consolidation_briefing_gist: text("consolidation_briefing_gist").notNull().default("https://gist.githubusercontent.com/Alexelsea/6ccd289190f7fd3c173599de07a48db8/raw/2f43450d8d693e5289429cb7a5de3bb149304716/briefing.md"),
+  consolidation_last_run_at: text("consolidation_last_run_at"),
+  consolidation_last_cc_task_id: integer("consolidation_last_cc_task_id"),
 });
 
 export const insertCronConfigSchema = createInsertSchema(cronConfig).omit({ id: true });
