@@ -139,7 +139,7 @@ export const cronConfig = sqliteTable("cron_config", {
   default_gh_repo: text("default_gh_repo").notNull().default("bemomentiq/momentiq-dna"),
   frontend_gh_repo: text("frontend_gh_repo").notNull().default("bemomentiq/momentiq-dna"),
   // The Hub's own repo — target for self-improvement slices
-  hub_gh_repo: text("hub_gh_repo").notNull().default("bemomentiq/autonomy-hub"),
+  hub_gh_repo: text("hub_gh_repo").notNull().default("bemomentiq/momentiq-dna-hub"),
   // Batching knobs
   batch_same_area: integer("batch_same_area", { mode: "boolean" }).notNull().default(true),
   batch_min_siblings: integer("batch_min_siblings").notNull().default(2), // if >=N siblings in same area, merge
@@ -171,6 +171,14 @@ export const cronConfig = sqliteTable("cron_config", {
   auto_resume_audit: integer("auto_resume_audit", { mode: "boolean" }).notNull().default(false),
   auto_resume_audit_max: integer("auto_resume_audit_max").notNull().default(1),
   audit_interval_hours: integer("audit_interval_hours").notNull().default(6),
+  // DNA Hub 4-lane extensions
+  auto_resume_test_debug: integer("auto_resume_test_debug", { mode: "boolean" }).notNull().default(true),
+  auto_resume_test_debug_max: integer("auto_resume_test_debug_max").notNull().default(1),
+  test_debug_interval_hours: integer("test_debug_interval_hours").notNull().default(4),
+  pr_babysitter_enabled: integer("pr_babysitter_enabled", { mode: "boolean" }).notNull().default(true),
+  companion_site_url: text("companion_site_url").notNull().default("https://kalodata-ai-content-platform-t.pplx.app"),
+  epic_mode: integer("epic_mode", { mode: "boolean" }).notNull().default(true),
+  gh_webhook_secret: text("gh_webhook_secret").notNull().default("dev-bypass"),
 });
 
 export const insertCronConfigSchema = createInsertSchema(cronConfig).omit({ id: true });

@@ -153,6 +153,14 @@ function ensureSchema() {
   if (!cHas("auto_resume_audit")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN auto_resume_audit INTEGER NOT NULL DEFAULT 0");
   if (!cHas("auto_resume_audit_max")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN auto_resume_audit_max INTEGER NOT NULL DEFAULT 1");
   if (!cHas("audit_interval_hours")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN audit_interval_hours INTEGER NOT NULL DEFAULT 6");
+  // DNA Hub 4-lane extensions (idempotent)
+  if (!cHas("auto_resume_test_debug")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN auto_resume_test_debug INTEGER NOT NULL DEFAULT 1");
+  if (!cHas("auto_resume_test_debug_max")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN auto_resume_test_debug_max INTEGER NOT NULL DEFAULT 1");
+  if (!cHas("test_debug_interval_hours")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN test_debug_interval_hours INTEGER NOT NULL DEFAULT 4");
+  if (!cHas("pr_babysitter_enabled")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN pr_babysitter_enabled INTEGER NOT NULL DEFAULT 1");
+  if (!cHas("companion_site_url")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN companion_site_url TEXT NOT NULL DEFAULT 'https://kalodata-ai-content-platform-t.pplx.app'");
+  if (!cHas("epic_mode")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN epic_mode INTEGER NOT NULL DEFAULT 1");
+  if (!cHas("gh_webhook_secret")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN gh_webhook_secret TEXT NOT NULL DEFAULT 'dev-bypass'");
   // Bump prior summaries default to 15 if still on legacy default
   sqlite.exec("UPDATE cron_config SET max_prior_summaries = 15 WHERE max_prior_summaries < 15");
   // Fleet runs (executor cron + ad-hoc)
@@ -262,6 +270,13 @@ function ensureSchema() {
       INSERT INTO cron_config (id, enabled, interval_minutes, next_due_at)
       VALUES (1, 1, 60, datetime('now', '+60 minutes'))
     `).run();
+  }
+  // Seed focus_mission default for DNA hub if not set
+  const focusRow = sqlite.prepare("SELECT focus_mission FROM cron_config WHERE id=1").get() as any;
+  if (!focusRow?.focus_mission) {
+    sqlite.prepare(
+      "UPDATE cron_config SET focus_mission = ? WHERE id=1",
+    ).run("Drive momentiq-dna repo to production-readiness per companion site signals. Prioritize Code Completeness > Test Coverage > E2E Flows > Schema Integrity. Epic mode enabled.");
   }
   // Seed GitHub PAT from environment if not already set in DB.
   // Set GH_TOKEN or GITHUB_TOKEN env var on Railway; configure via Settings → GitHub PAT at runtime.
