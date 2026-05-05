@@ -106,7 +106,7 @@ export async function dispatchOrganizerToCC(scope: OrganizerScope): Promise<Orga
   const briefing = ORGANIZER_BRIEFING
     .replace(/{DEFAULT_REPO}/g, cfg.default_gh_repo ?? "bemomentiq/momentiq-dna")
     .replace(/{HUB_BASE}/g, process.env.NODE_ENV === "production"
-      ? "https://momentiq-dna-hub.up.railway.app/port/5000"
+      ? "https://momentiq-dna-hub.pplx.app/port/5000"
       : "http://localhost:5000");
 
   const payload = {

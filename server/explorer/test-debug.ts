@@ -47,7 +47,7 @@ export function registerTestDebugRoutes(app: Express) {
       .get(new Date().toISOString(), trigger, JSON.stringify(surfaces)) as any;
 
     const cfg = storage.getCronConfig() as any;
-    const hubUrl = cfg.hub_url || process.env.HUB_URL || "https://momentiq-dna-hub.up.railway.app";
+    const hubUrl = cfg.hub_url || process.env.HUB_URL || "https://momentiq-dna-hub.pplx.app";
 
     const briefing = buildTestDebugBriefing({ run_id: run.id, surfaces, hub_url: hubUrl });
 

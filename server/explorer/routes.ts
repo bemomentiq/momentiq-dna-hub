@@ -14,7 +14,7 @@ function buildFleetBriefing(run_id: number, ingestUrl: string, corePrompt: strin
 Run Autonomy Hub Explorer cycle #${run_id} — investigate SID codebase + recent activity, surface findings + draft tasks, PUT results back to the Autonomy Hub.
 
 ## Context
-The Autonomy Hub (https://momentiq-dna-hub.up.railway.app) tracks SID's 40 canonical autonomy actions and their production-readiness. It needs an autonomous codebase explorer to continuously surface gaps, distill learning patterns, and draft optimally-batched follow-up tasks in CC's 8-H2 schema. This task IS that cycle.
+The Autonomy Hub (https://momentiq-dna-hub.pplx.app) tracks SID's 40 canonical autonomy actions and their production-readiness. It needs an autonomous codebase explorer to continuously surface gaps, distill learning patterns, and draft optimally-batched follow-up tasks in CC's 8-H2 schema. This task IS that cycle.
 
 Run_id: ${run_id} (unique identifier; the platform expects you to PUT results to a URL containing this id).
 
@@ -330,7 +330,7 @@ export function registerExplorerRoutes(app: Express) {
         const children = storage.listDraftTasks({ limit: 100 }).filter((x) => x.merged_into_id === master.id);
         const fakeGroup = { key: "x", repo: pickRepoForTask(master, { default_gh_repo: cfg.default_gh_repo, frontend_gh_repo: cfg.frontend_gh_repo }), area: master.area ?? "general", priority: master.priority, tasks: children };
         if (fakeGroup.tasks.length === 0) continue;
-        const r = await createBatchedFleetTracker(fakeGroup, { source_url: `https://momentiq-dna-hub.up.railway.app/#/backlog`, run_id: id });
+        const r = await createBatchedFleetTracker(fakeGroup, { source_url: `https://momentiq-dna-hub.pplx.app/#/backlog`, run_id: id });
         if (r.master.ok) {
           storage.updateDraftTask(master.id, {
             gh_issue_number: r.master.number ?? null,
@@ -344,7 +344,7 @@ export function registerExplorerRoutes(app: Express) {
       // Solos: drafts that weren't merged into a master
       const solos = activeThisRun.filter((t) => t.status !== "superseded" && !t.gh_issue_number && !(t.batch_id?.startsWith("ah-master-") ?? false));
       for (const t of solos) {
-        const r = await createSoloIssueForTask(t, { source_url: `https://momentiq-dna-hub.up.railway.app/#/backlog`, run_id: id });
+        const r = await createSoloIssueForTask(t, { source_url: `https://momentiq-dna-hub.pplx.app/#/backlog`, run_id: id });
         if (r.ok) ghIssuesCreated++;
       }
     }
@@ -489,7 +489,7 @@ export function registerExplorerRoutes(app: Express) {
     });
 
     // 2. Build the prompt + the fleet-shaped briefing
-    const prodHost = process.env.NODE_ENV === "production" ? "https://momentiq-dna-hub.up.railway.app/port/5000" : "http://localhost:5000";
+    const prodHost = process.env.NODE_ENV === "production" ? "https://momentiq-dna-hub.pplx.app/port/5000" : "http://localhost:5000";
     const ingestUrl = `${prodHost}/api/explorer/runs/${run.id}/ingest`;
     const corePrompt = await buildExplorerPrompt(run.id);
     const fleetBriefing = buildFleetBriefing(run.id, ingestUrl, corePrompt);
@@ -567,7 +567,7 @@ export function registerExplorerRoutes(app: Express) {
     const repoUrl = (req.body?.repo_url as string) || "https://github.com/bemomentiq/momentiq-dna";
     const priority = (req.body?.priority as string) || "p0"; // bump priority on fallback
 
-    const prodHost = process.env.NODE_ENV === "production" ? "https://momentiq-dna-hub.up.railway.app/port/5000" : "http://localhost:5000";
+    const prodHost = process.env.NODE_ENV === "production" ? "https://momentiq-dna-hub.pplx.app/port/5000" : "http://localhost:5000";
     const ingestUrl = `${prodHost}/api/explorer/runs/${run.id}/ingest`;
     const corePrompt = await buildExplorerPrompt(run.id);
     const fleetBriefing = buildFleetBriefing(run.id, ingestUrl, corePrompt);
@@ -628,7 +628,7 @@ export function registerExplorerRoutes(app: Express) {
       for (const g of groups) {
         if (g.tasks.length < cfg.batch_min_siblings) {
           for (const t of g.tasks) {
-            const r = await createSoloIssueForTask(t, { source_url: "https://momentiq-dna-hub.up.railway.app/#/backlog", run_id: drafts[0].run_id });
+            const r = await createSoloIssueForTask(t, { source_url: "https://momentiq-dna-hub.pplx.app/#/backlog", run_id: drafts[0].run_id });
             results.push({ draft_id: t.id, ok: r.ok, gh: r.ok ? { number: r.number, url: r.url } : undefined, error: r.error });
           }
           continue;
@@ -647,7 +647,7 @@ export function registerExplorerRoutes(app: Express) {
           storage.updateDraftTask(t.id, { merged_into_id: master.id, status: "superseded" as any });
         }
         // GitHub: master tracker + N children
-        const fleet = await createBatchedFleetTracker(g, { source_url: "https://momentiq-dna-hub.up.railway.app/#/backlog", run_id: drafts[0].run_id });
+        const fleet = await createBatchedFleetTracker(g, { source_url: "https://momentiq-dna-hub.pplx.app/#/backlog", run_id: drafts[0].run_id });
         if (fleet.master.ok) {
           storage.updateDraftTask(master.id, {
             gh_issue_number: fleet.master.number ?? null,
@@ -668,7 +668,7 @@ export function registerExplorerRoutes(app: Express) {
           results.push({ draft_id: d.id, ok: true, gh: { number: d.gh_issue_number, url: d.gh_issue_url ?? undefined }, error: "already_synced" });
           continue;
         }
-        const r = await createSoloIssueForTask(d, { source_url: "https://momentiq-dna-hub.up.railway.app/#/backlog", run_id: d.run_id });
+        const r = await createSoloIssueForTask(d, { source_url: "https://momentiq-dna-hub.pplx.app/#/backlog", run_id: d.run_id });
         results.push({ draft_id: d.id, ok: r.ok, gh: r.ok ? { number: r.number, url: r.url } : undefined, error: r.error });
       }
     }
@@ -690,7 +690,7 @@ export function registerExplorerRoutes(app: Express) {
       for (const g of groups) {
         if (g.tasks.length < cfg.batch_min_siblings) {
           for (const t of g.tasks) {
-            const r = await createSoloIssueForTask(t, { source_url: "https://momentiq-dna-hub.up.railway.app/#/backlog", run_id: t.run_id });
+            const r = await createSoloIssueForTask(t, { source_url: "https://momentiq-dna-hub.pplx.app/#/backlog", run_id: t.run_id });
             results.push({ draft_id: t.id, ok: r.ok, gh: r.ok ? { number: r.number, url: r.url } : undefined, error: r.error });
           }
           continue;
@@ -707,7 +707,7 @@ export function registerExplorerRoutes(app: Express) {
         for (const t of g.tasks) {
           storage.updateDraftTask(t.id, { merged_into_id: master.id, status: "superseded" as any });
         }
-        const fleet = await createBatchedFleetTracker(g, { source_url: "https://momentiq-dna-hub.up.railway.app/#/backlog", run_id: g.tasks[0].run_id });
+        const fleet = await createBatchedFleetTracker(g, { source_url: "https://momentiq-dna-hub.pplx.app/#/backlog", run_id: g.tasks[0].run_id });
         if (fleet.master.ok) {
           storage.updateDraftTask(master.id, {
             gh_issue_number: fleet.master.number ?? null,
@@ -721,7 +721,7 @@ export function registerExplorerRoutes(app: Express) {
       }
     } else {
       for (const d of all) {
-        const r = await createSoloIssueForTask(d, { source_url: "https://momentiq-dna-hub.up.railway.app/#/backlog", run_id: d.run_id });
+        const r = await createSoloIssueForTask(d, { source_url: "https://momentiq-dna-hub.pplx.app/#/backlog", run_id: d.run_id });
         results.push({ draft_id: d.id, ok: r.ok, gh: r.ok ? { number: r.number, url: r.url } : undefined, error: r.error });
       }
     }

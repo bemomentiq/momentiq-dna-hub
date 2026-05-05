@@ -251,7 +251,7 @@ export async function buildExplorerPrompt(run_id: number): Promise<string> {
     `DO NOT close issues during micropass — leave closure/merge to the dedicated Organizer cron.`,
     ``,
     `# INGEST ENDPOINT`,
-    `Your final POST (once you have complete JSON): PUT ${process.env.NODE_ENV === "production" ? "https://momentiq-dna-hub.up.railway.app/port/5000" : "http://localhost:5000"}/api/explorer/runs/${run_id}/ingest`,
+    `Your final POST (once you have complete JSON): PUT ${process.env.NODE_ENV === "production" ? "https://momentiq-dna-hub.pplx.app/port/5000" : "http://localhost:5000"}/api/explorer/runs/${run_id}/ingest`,
     `On success you'll get 200 with {"ok":true,"counts":{...}}.`,
     `If JSON fails Zod validation you'll get 400 — fix and retry.`,
     "",

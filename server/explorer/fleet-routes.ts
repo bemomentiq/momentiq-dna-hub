@@ -529,8 +529,8 @@ async function fetchGhContext(repo: string, token: string | null): Promise<{ rec
 // ============ Routes ============
 
 export function registerFleetRoutes(app: Express) {
-  const prodHost = process.env.NODE_ENV === "production" ? "https://momentiq-dna-hub.up.railway.app/port/5000" : "http://localhost:5000";
-  const hubBase = process.env.NODE_ENV === "production" ? "https://momentiq-dna-hub.up.railway.app/port/5000" : "http://localhost:5000";
+  const prodHost = process.env.NODE_ENV === "production" ? "https://momentiq-dna-hub.pplx.app/port/5000" : "http://localhost:5000";
+  const hubBase = process.env.NODE_ENV === "production" ? "https://momentiq-dna-hub.pplx.app/port/5000" : "http://localhost:5000";
 
   // List fleet runs (executor + ad-hoc)
   app.get("/api/fleet/runs", (req, res) => {
