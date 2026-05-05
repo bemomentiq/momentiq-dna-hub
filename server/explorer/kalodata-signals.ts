@@ -1,6 +1,14 @@
 import { storage } from "../storage";
 
-const KALODATA_BASE = process.env.KALODATA_API_URL || "https://kalodata.com";
+function resolveCompanionBaseUrl(): string {
+  try {
+    const cfg = storage.getCronConfig();
+    if (cfg.companion_site_url) return cfg.companion_site_url;
+  } catch {
+    // storage not yet initialized — fall through to env/default
+  }
+  return process.env.KALODATA_API_URL || "https://kalodata.com";
+}
 
 export interface ReadinessSignal {
   category: string;
@@ -20,6 +28,7 @@ export async function fetchKalodataSignals(): Promise<{
   readiness: ReadinessSignal[] | null;
   roadmapState: RoadmapStateSignal | null;
 }> {
+  const KALODATA_BASE = resolveCompanionBaseUrl();
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   const apiKey = process.env.KALODATA_API_KEY;
   if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
