@@ -2,7 +2,7 @@ import { storage } from "../storage";
 
 function resolveCompanionBaseUrl(): string {
   const cfg = storage.getCronConfig();
-  return cfg.companion_site_url || process.env.KALODATA_API_URL || "https://kalodata.com";
+  return process.env.KALODATA_API_URL || cfg.companion_site_url || "https://kalodata.com";
 }
 
 export interface ReadinessSignal {
