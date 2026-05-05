@@ -11,7 +11,7 @@ import { dispatchConsolidationToCC } from "./consolidation";
 import { dispatchOrganizerToCC, computeExplorerPauseDecision, setExplorerPaused, isOrganizerDue } from "./backlog-organizer";
 
 const HUB_BASE = process.env.NODE_ENV === "production"
-  ? "https://momentiq-dna-hub.up.railway.app/port/5000"
+  ? "https://momentiq-dna-hub.pplx.app/port/5000"
   : "http://localhost:5000";
 
 type Kind = "explorer" | "executor" | "audit" | "test_debug" | "consolidation" | "organizer";
