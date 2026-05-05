@@ -1,13 +1,8 @@
 import { storage } from "../storage";
 
 function resolveCompanionBaseUrl(): string {
-  try {
-    const cfg = storage.getCronConfig();
-    if (cfg.companion_site_url) return cfg.companion_site_url;
-  } catch {
-    // storage not yet initialized — fall through to env/default
-  }
-  return process.env.KALODATA_API_URL || "https://kalodata.com";
+  const cfg = storage.getCronConfig();
+  return cfg.companion_site_url || process.env.KALODATA_API_URL || "https://kalodata.com";
 }
 
 export interface ReadinessSignal {
