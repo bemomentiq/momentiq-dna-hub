@@ -134,6 +134,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
   });
 
+  // Per-theme drill-down: champion config + variants (A/B runs).
+  // Returns { dna_configured, theme, variants } so the client can render an
+  // empty-state when DNA_API_BASE is unset, instead of 502'ing.
+  app.get("/api/content-platform/themes/:slug", async (req, res) => {
+    const data = await dnaClient.theme(req.params.slug);
+    res.json({
+      dna_configured: dnaClient.configured(),
+      slug: req.params.slug,
+      theme: data?.theme ?? null,
+      variants: data?.variants ?? null,
+      fetched_at: new Date().toISOString(),
+    });
+  });
+
   app.get("/api/actions", (_req, res) => {
     res.json(ACTIONS.map((a) => ({ ...a, extras: getExtras(a.action_name) })));
   });
