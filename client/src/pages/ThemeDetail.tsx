@@ -76,7 +76,7 @@ function statusTone(s: AbRun["status"]) {
 export default function ThemeDetail() {
   const params = useParams<{ slug: string }>();
   const slug = params?.slug;
-  const { data, isLoading } = useQuery<ThemeDetailPayload>({
+  const { data, isLoading, isError, error, refetch } = useQuery<ThemeDetailPayload>({
     queryKey: ["/api/content-platform/themes", slug],
     enabled: !!slug,
   });
@@ -99,7 +99,30 @@ export default function ThemeDetail() {
     </Link>
   );
 
-  if (!data || !data.dna_configured) {
+  // Distinguish a real fetch failure (network/5xx) from the upstream
+  // explicitly reporting that DNA isn't configured. Bugbot flagged that
+  // collapsing these to one empty-state hides errors.
+  if (isError || !data) {
+    return (
+      <Layout title={slug ?? "Theme"} subtitle="Per-theme drill-down" actions={backLink}>
+        <div className="rounded-lg border border-destructive/40 bg-card p-8 text-center">
+          <h3 className="font-semibold text-sm mb-1">Failed to load theme</h3>
+          <p className="text-xs text-muted-foreground mb-3">
+            {error instanceof Error ? error.message : "The /api/content-platform/themes request failed."}
+          </p>
+          <button
+            onClick={() => refetch()}
+            className="text-xs px-3 py-1.5 rounded border border-card-border hover:bg-muted"
+            data-testid="button-retry"
+          >
+            Retry
+          </button>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (!data.dna_configured) {
     return (
       <Layout title={slug ?? "Theme"} subtitle="Per-theme drill-down" actions={backLink}>
         <div className="rounded-lg border border-dashed border-card-border bg-card p-8 text-center">
@@ -268,8 +291,7 @@ export default function ThemeDetail() {
               .slice()
               .sort((a, b) => a.started_at.localeCompare(b.started_at))
               .map((v, i) => {
-                const isChampion =
-                  theme.champion_config_id != null && v.run_id === theme.champion_config_id;
+                const isChampion = v.status === "promoted";
                 return (
                   <li key={v.run_id} className="flex items-center gap-2">
                     <div
