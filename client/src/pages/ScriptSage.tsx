@@ -53,21 +53,57 @@ const STATUS_COLORS: Record<JobStatus["last_status"], string> = {
 };
 
 export default function ScriptSage() {
-  const { data, isLoading } = useQuery<ScriptSageResponse>({
+  const { data, isLoading, isError, error, refetch } = useQuery<ScriptSageResponse>({
     queryKey: ["/api/content-platform/scriptsage"],
     refetchInterval: 15000,
   });
 
-  const configured = data?.scriptsage_configured ?? false;
-  const stats = data?.stats ?? null;
-  const jobs = data?.jobs ?? null;
+  if (isLoading) {
+    return (
+      <Layout
+        title="ScriptSage Throughput"
+        subtitle="Live throughput, fallback/error rates, status-sync lag, and background-job health for the scriptsage-backend service."
+      >
+        <div className="text-sm text-muted-foreground">Loading…</div>
+      </Layout>
+    );
+  }
+
+  // Distinguish a real fetch failure (network/5xx) from the upstream
+  // explicitly reporting that ScriptSage isn't configured. Bugbot flagged
+  // that collapsing these to one empty-state hides errors.
+  if (isError || !data) {
+    return (
+      <Layout
+        title="ScriptSage Throughput"
+        subtitle="Live throughput, fallback/error rates, status-sync lag, and background-job health for the scriptsage-backend service."
+      >
+        <div className="rounded-lg border border-destructive/40 bg-card p-8 text-center">
+          <h3 className="font-semibold text-sm mb-1">Failed to load ScriptSage status</h3>
+          <p className="text-xs text-muted-foreground mb-3">
+            {error instanceof Error ? error.message : "The /api/content-platform/scriptsage request failed."}
+          </p>
+          <button
+            onClick={() => refetch()}
+            className="text-xs px-3 py-1.5 rounded border border-card-border hover:bg-muted"
+          >
+            Retry
+          </button>
+        </div>
+      </Layout>
+    );
+  }
+
+  const configured = data.scriptsage_configured;
+  const stats = data.stats;
+  const jobs = data.jobs;
 
   return (
     <Layout
       title="ScriptSage Throughput"
       subtitle="Live throughput, fallback/error rates, status-sync lag, and background-job health for the scriptsage-backend service."
     >
-      {!isLoading && !configured ? (
+      {!configured ? (
         <EmptyState />
       ) : (
         <>
