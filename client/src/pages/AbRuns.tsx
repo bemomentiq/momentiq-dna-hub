@@ -66,7 +66,7 @@ function fmtDate(v: string | null): string {
 export default function AbRuns() {
   const [status, setStatus] = useState<StatusFilter>("running");
   const { data, isLoading } = useQuery<AbRunsResponse>({
-    queryKey: ["/api/content-platform/ab-runs", `?status=${status}&limit=100`],
+    queryKey: [`/api/content-platform/ab-runs?status=${status}&limit=100`],
   });
 
   const dnaConfigured = data?.dna_configured ?? true;
