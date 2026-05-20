@@ -14,7 +14,7 @@ const items = [
   { href: "/roadmap", label: "Roadmap", icon: Map },
   { href: "/training", label: "Training Data", icon: Database },
   { href: "/pipeline", label: "Data Pipeline", icon: Workflow },
-  { href: "/evals", label: "Evals", icon: Activity },
+  { href: "/ab-runs", label: "A/B Runs", icon: Activity },
   { href: "/hitl", label: "HITL Burden", icon: Hourglass },
   { href: "/money-path", label: "Money Path", icon: DollarSign },
   { href: "/issues", label: "GitHub Issues", icon: GitPullRequest },

@@ -10,7 +10,7 @@ import AllActions from "@/pages/AllActions";
 import ActionDetail from "@/pages/ActionDetail";
 import Roadmap from "@/pages/Roadmap";
 import TrainingWorkbench from "@/pages/TrainingWorkbench";
-import Evals from "@/pages/Evals";
+import AbRuns from "@/pages/AbRuns";
 import Issues from "@/pages/Issues";
 import ExecutiveBrief from "@/pages/ExecutiveBrief";
 import MoneyPath from "@/pages/MoneyPath";
@@ -37,7 +37,7 @@ function AppRouter() {
       <Route path="/roadmap" component={Roadmap} />
       <Route path="/training" component={TrainingWorkbench} />
       <Route path="/pipeline" component={DataPipeline} />
-      <Route path="/evals" component={Evals} />
+      <Route path="/ab-runs" component={AbRuns} />
       <Route path="/hitl" component={HitlBurden} />
       <Route path="/money-path" component={MoneyPath} />
       <Route path="/issues" component={Issues} />
