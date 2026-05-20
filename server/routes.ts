@@ -141,9 +141,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/content-platform/veo-cost", async (req, res) => {
     const raw = parseInt(String(req.query.window_days ?? "7"), 10);
     const windowDays = [7, 14, 30].includes(raw) ? raw : 7;
+    const configured = dnaClient.configured();
     const upstream = await dnaClient.veoCost(windowDays);
+    // When DNA is configured but veoCost returns null, that's an upstream
+    // failure (network/5xx) — surface it as 502 with upstream_error so the
+    // client can render a distinct error state instead of collapsing to
+    // "no Veo calls". Bugbot flagged this on PR #19.
+    if (configured && upstream === null) {
+      return void res.status(502).json({
+        dna_configured: true,
+        upstream_error: true,
+        summary: [],
+        total_cost_usd: 0,
+        window_days: windowDays,
+      });
+    }
     res.json({
-      dna_configured: dnaClient.configured(),
+      dna_configured: configured,
+      upstream_error: false,
       summary: upstream?.summary ?? [],
       total_cost_usd: upstream?.total_cost_usd ?? 0,
       window_days: upstream?.window_days ?? windowDays,

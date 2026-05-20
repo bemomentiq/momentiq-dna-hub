@@ -15,6 +15,7 @@ type VeoCallSummary = {
 
 type VeoCostResponse = {
   dna_configured: boolean;
+  upstream_error?: boolean;
   summary: VeoCallSummary[];
   total_cost_usd: number;
   window_days: number;
@@ -29,11 +30,11 @@ function fmtUsd(n: number | null | undefined): string {
 
 export default function VeoCost() {
   const [windowDays, setWindowDays] = useState<number>(7);
-  const { data, isLoading } = useQuery<VeoCostResponse>({
+  const { data, isLoading, isError, error, refetch } = useQuery<VeoCostResponse>({
     queryKey: ["/api/content-platform/veo-cost", windowDays],
     queryFn: async () => {
       const r = await fetch(`/api/content-platform/veo-cost?window_days=${windowDays}`);
-      if (!r.ok) throw new Error(`${r.status}`);
+      if (!r.ok) throw new Error(`Request failed (${r.status})`);
       return r.json();
     },
   });
@@ -82,7 +83,28 @@ export default function VeoCost() {
 
       {isLoading ? (
         <div className="text-muted-foreground">Loading…</div>
-      ) : !data || data.dna_configured === false ? (
+      ) : isError || !data || data.upstream_error ? (
+        // Distinguish a real fetch failure (network/5xx/upstream null) from
+        // the upstream explicitly reporting that DNA isn't configured.
+        // Bugbot flagged that collapsing these to one empty-state hides errors.
+        <div className="rounded-lg border border-destructive/40 bg-card p-8 text-center">
+          <h3 className="font-semibold text-sm mb-1">Failed to load Veo cost</h3>
+          <p className="text-xs text-muted-foreground mb-3">
+            {error instanceof Error
+              ? error.message
+              : data?.upstream_error
+                ? "Upstream momentiq-dna request failed."
+                : "The /api/content-platform/veo-cost request failed."}
+          </p>
+          <button
+            onClick={() => refetch()}
+            data-testid="veo-cost-retry"
+            className="text-xs px-3 py-1.5 rounded border border-card-border hover:bg-muted"
+          >
+            Retry
+          </button>
+        </div>
+      ) : data.dna_configured === false ? (
         <div className="rounded-lg border border-card-border bg-card p-8 text-center">
           <div className="text-sm font-semibold mb-1">DNA service not configured</div>
           <p className="text-sm text-muted-foreground">
