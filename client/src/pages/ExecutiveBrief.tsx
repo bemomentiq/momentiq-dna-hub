@@ -87,13 +87,28 @@ function fmtDelta(n: number | null | undefined): string {
 
 export default function ExecutiveBrief() {
   const { data: overview } = useQuery<Overview>({ queryKey: ["/api/content-platform/overview"] });
-  const { data: promo } = useQuery<PromotionResp>({ queryKey: ["/api/content-platform/promotion-candidates"] });
-  const { data: ghIssues } = useQuery<GhIssuesResp>({
+  const {
+    data: promo,
+    isPending: promoPending,
+    isError: promoIsError,
+    error: promoError,
+  } = useQuery<PromotionResp>({ queryKey: ["/api/content-platform/promotion-candidates"] });
+  const {
+    data: ghIssues,
+    isError: ghIssuesIsError,
+    error: ghIssuesError,
+  } = useQuery<GhIssuesResp>({
     queryKey: ["/api/gh-issues?state=open&labels=blocker"],
   });
-  const { data: ghBugs } = useQuery<GhIssuesResp>({
+  const {
+    data: ghBugs,
+    isError: ghBugsIsError,
+    error: ghBugsError,
+  } = useQuery<GhIssuesResp>({
     queryKey: ["/api/gh-issues?state=open&labels=bug"],
   });
+  const blockersIsError = ghIssuesIsError || ghBugsIsError;
+  const blockersError = ghIssuesError || ghBugsError;
 
   const blockers = [
     ...(ghIssues?.issues ?? []),
@@ -181,7 +196,17 @@ export default function ExecutiveBrief() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {candidates.length === 0 ? (
+            {promoPending ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : promoIsError ? (
+              <div
+                className="text-sm text-rose-600 dark:text-rose-400 p-3 rounded-md border border-rose-500/30 bg-rose-500/5"
+                data-testid="promo-error"
+              >
+                Failed to load promotion candidates
+                {promoError instanceof Error ? ` — ${promoError.message}` : ""}
+              </div>
+            ) : candidates.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 {dash} no completed runs currently clear the promotion gate.
               </p>
@@ -227,7 +252,15 @@ export default function ExecutiveBrief() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {blockers.length === 0 ? (
+            {blockersIsError ? (
+              <div
+                className="text-sm text-rose-600 dark:text-rose-400 p-3 rounded-md border border-rose-500/30 bg-rose-500/5"
+                data-testid="blockers-error"
+              >
+                Failed to load blockers from GitHub
+                {blockersError instanceof Error ? ` — ${blockersError.message}` : ""}
+              </div>
+            ) : blockers.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 {dash} no open blockers across content repos.
               </p>
