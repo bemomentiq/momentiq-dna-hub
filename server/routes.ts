@@ -134,6 +134,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
   });
 
+  // Themes & Champions: proxies dnaClient.themes() with dna_configured flag so
+  // the client can render an empty-state when DNA_API_BASE is unset.
+  app.get("/api/content-platform/themes", async (_req, res) => {
+    const result = await dnaClient.themes();
+    res.json({
+      themes: result?.themes ?? [],
+      dna_configured: dnaClient.configured(),
+    });
+  });
+
   app.get("/api/actions", (_req, res) => {
     res.json(ACTIONS.map((a) => ({ ...a, extras: getExtras(a.action_name) })));
   });
