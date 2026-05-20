@@ -134,6 +134,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
   });
 
+  // ScriptSage throughput dashboard: stats + job-health, served in one round-trip.
+  // Both upstream helpers return null when SCRIPTSAGE_API_BASE is unset, so the
+  // client renders an empty-state without crashing.
+  app.get("/api/content-platform/scriptsage", async (_req, res) => {
+    const [stats, jobsResp] = await Promise.all([
+      scriptsageClient.stats(),
+      scriptsageClient.jobs(),
+    ]);
+    res.json({
+      scriptsage_configured: scriptsageClient.configured(),
+      stats,
+      jobs: jobsResp?.jobs ?? null,
+      fetched_at: new Date().toISOString(),
+    });
+  });
+
   app.get("/api/actions", (_req, res) => {
     res.json(ACTIONS.map((a) => ({ ...a, extras: getExtras(a.action_name) })));
   });
