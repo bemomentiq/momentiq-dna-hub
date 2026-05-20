@@ -95,6 +95,7 @@ export default function ExecutiveBrief() {
   } = useQuery<PromotionResp>({ queryKey: ["/api/content-platform/promotion-candidates"] });
   const {
     data: ghIssues,
+    isPending: ghIssuesPending,
     isError: ghIssuesIsError,
     error: ghIssuesError,
   } = useQuery<GhIssuesResp>({
@@ -102,11 +103,13 @@ export default function ExecutiveBrief() {
   });
   const {
     data: ghBugs,
+    isPending: ghBugsPending,
     isError: ghBugsIsError,
     error: ghBugsError,
   } = useQuery<GhIssuesResp>({
     queryKey: ["/api/gh-issues?state=open&labels=bug"],
   });
+  const blockersPending = ghIssuesPending || ghBugsPending;
   const blockersIsError = ghIssuesIsError || ghBugsIsError;
   const blockersError = ghIssuesError || ghBugsError;
 
@@ -260,6 +263,8 @@ export default function ExecutiveBrief() {
                 Failed to load blockers from GitHub
                 {blockersError instanceof Error ? ` — ${blockersError.message}` : ""}
               </div>
+            ) : blockersPending ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
             ) : blockers.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 {dash} no open blockers across content repos.
