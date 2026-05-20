@@ -75,7 +75,7 @@ function Badge({ tone }: { tone: "good" | "warn" | "bad" | "muted" }) {
 }
 
 export default function Scoring() {
-  const { data, isLoading } = useQuery<IdsResponse>({
+  const { data, isLoading, isError, error, refetch } = useQuery<IdsResponse>({
     queryKey: ["/api/content-platform/ids-distribution?window_days=7"],
   });
 
@@ -87,7 +87,29 @@ export default function Scoring() {
     );
   }
 
-  if (!data?.dna_configured) {
+  // Distinguish a real fetch failure (network/5xx) from the upstream
+  // explicitly reporting that DNA isn't configured. Bugbot flagged that
+  // collapsing these to one empty-state hides errors.
+  if (isError || !data) {
+    return (
+      <Layout title="IDS Scoring" subtitle="Indistinguishability score distribution (7-day window).">
+        <div className="rounded-lg border border-destructive/40 bg-card p-8 text-center">
+          <h3 className="font-semibold text-sm mb-1">Failed to load IDS distribution</h3>
+          <p className="text-xs text-muted-foreground mb-3">
+            {error instanceof Error ? error.message : "The /api/content-platform/ids-distribution request failed."}
+          </p>
+          <button
+            onClick={() => refetch()}
+            className="text-xs px-3 py-1.5 rounded border border-card-border hover:bg-muted"
+          >
+            Retry
+          </button>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (!data.dna_configured) {
     return (
       <Layout
         title="IDS Scoring"
