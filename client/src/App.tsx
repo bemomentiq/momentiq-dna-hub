@@ -14,13 +14,13 @@ import Evals from "@/pages/Evals";
 import Issues from "@/pages/Issues";
 import ExecutiveBrief from "@/pages/ExecutiveBrief";
 import MoneyPath from "@/pages/MoneyPath";
-import HitlBurden from "@/pages/HitlBurden";
 import DataPipeline from "@/pages/DataPipeline";
 import Explorer from "@/pages/Explorer";
 import Backlog from "@/pages/Backlog";
 import Run from "@/pages/Run";
 import Fleet from "@/pages/Fleet";
 import Autonomy from "@/pages/Autonomy";
+import Scoring from "@/pages/Scoring";
 
 function AppRouter() {
   return (
@@ -38,7 +38,7 @@ function AppRouter() {
       <Route path="/training" component={TrainingWorkbench} />
       <Route path="/pipeline" component={DataPipeline} />
       <Route path="/evals" component={Evals} />
-      <Route path="/hitl" component={HitlBurden} />
+      <Route path="/scoring" component={Scoring} />
       <Route path="/money-path" component={MoneyPath} />
       <Route path="/issues" component={Issues} />
       <Route component={NotFound} />

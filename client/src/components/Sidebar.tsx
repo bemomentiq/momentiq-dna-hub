@@ -15,7 +15,7 @@ const items = [
   { href: "/training", label: "Training Data", icon: Database },
   { href: "/pipeline", label: "Data Pipeline", icon: Workflow },
   { href: "/evals", label: "Evals", icon: Activity },
-  { href: "/hitl", label: "HITL Burden", icon: Hourglass },
+  { href: "/scoring", label: "IDS Scoring", icon: Activity },
   { href: "/money-path", label: "Money Path", icon: DollarSign },
   { href: "/issues", label: "GitHub Issues", icon: GitPullRequest },
 ];
