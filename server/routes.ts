@@ -17,6 +17,8 @@ import { dispatchConsolidationToCC } from "./explorer/consolidation";
 import { dispatchOrganizerToCC, computeExplorerPauseDecision, type OrganizerScope } from "./explorer/backlog-organizer";
 import { storage } from "./storage";
 import { buildDigestMarkdown } from "./digest";
+import { dnaClient } from "./clients/dna";
+import { scriptsageClient } from "./clients/scriptsage";
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   registerExplorerRoutes(app);
@@ -38,7 +40,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!token || String(token).length < 10) {
       return void res.status(400).json({ error: "GitHub token not configured" });
     }
-    const repos = [cfg.default_gh_repo, cfg.frontend_gh_repo].filter(Boolean);
+    // Content platform: pull issues across momentiq-dna, dna-hub, scriptsage-{backend,frontend}.
+    // Keep default_gh_repo/frontend_gh_repo for backwards compat; merge + dedupe.
+    const contentRepos = [
+      "bemomentiq/momentiq-dna",
+      "bemomentiq/momentiq-dna-hub",
+      "bemomentiq/momentiq-scriptsage-backend",
+      "bemomentiq/momentiq-scriptsage-frontend",
+    ];
+    const reposRaw = [cfg.default_gh_repo, cfg.frontend_gh_repo, ...contentRepos].filter(Boolean);
+    const repos = Array.from(new Set(reposRaw));
     const state = (req.query.state as string) || "open";
     const labels = (req.query.labels as string) || ""; // comma-sep, default = all
     const headers = {
@@ -94,6 +105,33 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // Sort by updated_at desc across both repos
     all.sort((a, b) => b.updated_at.localeCompare(a.updated_at));
     res.json({ issues: all, repos, errors, fetched_at: new Date().toISOString() });
+  });
+
+  // Content-platform overview: aggregates dna corpus + A/B activity + ScriptSage
+  // throughput + subscriptions + open issues across the 4 content repos.
+  // Each upstream call returns null when its base URL env var is unset, so the
+  // endpoint never crashes — clients render empty-states per section.
+  app.get("/api/content-platform/overview", async (_req, res) => {
+    const [corpus, abRuns, veo, ids, ssStats, ssSubs] = await Promise.all([
+      dnaClient.corpus(),
+      dnaClient.abRuns({ status: "running", limit: 50 }),
+      dnaClient.veoCost(7),
+      dnaClient.idsDistribution(7),
+      scriptsageClient.stats(),
+      scriptsageClient.subscriptions(),
+    ]);
+    const overall = ids?.distributions.find((d) => d.dimension === "overall") ?? null;
+    res.json({
+      dna_configured: dnaClient.configured(),
+      scriptsage_configured: scriptsageClient.configured(),
+      corpus,
+      ab_runs_active: abRuns?.runs.length ?? null,
+      ids_median_7d: overall?.median ?? null,
+      veo_spend_7d_usd: veo?.total_cost_usd ?? null,
+      scriptsage: ssStats,
+      subscriptions: ssSubs,
+      fetched_at: new Date().toISOString(),
+    });
   });
 
   app.get("/api/actions", (_req, res) => {
