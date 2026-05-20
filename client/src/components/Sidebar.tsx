@@ -16,7 +16,7 @@ const items = [
   { href: "/pipeline", label: "Data Pipeline", icon: Workflow },
   { href: "/evals", label: "Evals", icon: Activity },
   { href: "/hitl", label: "HITL Burden", icon: Hourglass },
-  { href: "/money-path", label: "Money Path", icon: DollarSign },
+  { href: "/veo-cost", label: "Veo Cost & ROI", icon: DollarSign },
   { href: "/issues", label: "GitHub Issues", icon: GitPullRequest },
 ];
 

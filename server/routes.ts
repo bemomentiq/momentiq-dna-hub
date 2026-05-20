@@ -134,6 +134,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
   });
 
+  // Veo cost & ROI by theme — proxies dnaClient.veoCost. Returns
+  // { dna_configured, summary, total_cost_usd, window_days }. When dna is not
+  // configured (DNA_API_BASE unset) the upstream returns null and we surface
+  // an empty payload so the page can render its empty-state.
+  app.get("/api/content-platform/veo-cost", async (req, res) => {
+    const raw = parseInt(String(req.query.window_days ?? "7"), 10);
+    const windowDays = [7, 14, 30].includes(raw) ? raw : 7;
+    const upstream = await dnaClient.veoCost(windowDays);
+    res.json({
+      dna_configured: dnaClient.configured(),
+      summary: upstream?.summary ?? [],
+      total_cost_usd: upstream?.total_cost_usd ?? 0,
+      window_days: upstream?.window_days ?? windowDays,
+    });
+  });
+
   app.get("/api/actions", (_req, res) => {
     res.json(ACTIONS.map((a) => ({ ...a, extras: getExtras(a.action_name) })));
   });
