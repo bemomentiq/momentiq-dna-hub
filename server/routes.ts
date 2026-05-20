@@ -191,64 +191,100 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         errors.push(`${repo} milestones: ${err?.message ?? err}`);
       }
 
-      // Epic-labelled issues (state=all so we can compute open/closed). GH API
-      // doesn't support wildcard label filters, so we fetch all issues and filter.
-      for (const state of ["open", "closed"] as const) {
-        try {
-          const params = new URLSearchParams({
-            state,
-            per_page: "100",
-            sort: "updated",
-            direction: "desc",
-          });
-          const r = await fetch(`https://api.github.com/repos/${repo}/issues?${params}`, { headers });
+      // Epic-labelled issues: discover epic:* labels per-repo, then query issues
+      // server-side by label so groups aren't truncated to the latest 100.
+      const epicLabelsForRepo: string[] = [];
+      try {
+        for (let page = 1; page <= 5; page++) {
+          const r = await fetch(
+            `https://api.github.com/repos/${repo}/labels?per_page=100&page=${page}`,
+            { headers },
+          );
           if (!r.ok) {
-            errors.push(`${repo} issues:${state} ${r.status}`);
-            continue;
+            errors.push(`${repo} labels ${r.status}`);
+            break;
           }
           const items = (await r.json()) as any[];
-          for (const i of items) {
-            if (i.pull_request) continue;
-            const labels: string[] = (i.labels || [])
-              .map((l: any) => (typeof l === "string" ? l : l.name))
-              .filter(Boolean);
-            const epicLabels = labels.filter((l) => l.startsWith("epic:"));
-            if (epicLabels.length === 0) continue;
-            for (const epicLabel of epicLabels) {
-              let group = epicMap.get(epicLabel);
-              if (!group) {
-                group = {
-                  label: epicLabel,
-                  title: epicLabel
-                    .slice(5)
-                    .split(/[-_]/)
-                    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-                    .join(" "),
-                  description: "",
-                  open: 0,
-                  closed: 0,
-                  total: 0,
-                  issues: [],
-                  html_url: `https://github.com/search?q=label%3A%22${encodeURIComponent(epicLabel)}%22+org%3Abemomentiq&type=issues`,
-                };
-                epicMap.set(epicLabel, group);
-              }
-              if (i.state === "open") group.open += 1;
-              else group.closed += 1;
-              group.total += 1;
-              group.issues.push({
-                repo,
-                number: i.number,
-                title: i.title,
-                state: i.state,
-                html_url: i.html_url,
-                labels,
-                updated_at: i.updated_at,
-              });
+          if (!items.length) break;
+          for (const l of items) {
+            const name: string | undefined = l?.name;
+            if (name && name.startsWith("epic:")) epicLabelsForRepo.push(name);
+          }
+          if (items.length < 100) break;
+        }
+      } catch (err: any) {
+        errors.push(`${repo} labels: ${err?.message ?? err}`);
+      }
+
+      // Dedupe per (repo, number) in case an issue carries multiple epic labels
+      // and the API returns it for each label query.
+      const seen = new Set<string>();
+      for (const epicLabel of epicLabelsForRepo) {
+        try {
+          for (let page = 1; page <= 5; page++) {
+            const params = new URLSearchParams({
+              labels: epicLabel,
+              state: "all",
+              per_page: "100",
+              page: String(page),
+            });
+            const r = await fetch(
+              `https://api.github.com/repos/${repo}/issues?${params}`,
+              { headers },
+            );
+            if (!r.ok) {
+              errors.push(`${repo} issues label=${epicLabel} ${r.status}`);
+              break;
             }
+            const items = (await r.json()) as any[];
+            if (!items.length) break;
+            for (const i of items) {
+              if (i.pull_request) continue;
+              const labels: string[] = (i.labels || [])
+                .map((l: any) => (typeof l === "string" ? l : l.name))
+                .filter(Boolean);
+              const issueEpicLabels = labels.filter((l) => l.startsWith("epic:"));
+              if (issueEpicLabels.length === 0) continue;
+              for (const el of issueEpicLabels) {
+                const dedupeKey = `${repo}#${i.number}@${el}`;
+                if (seen.has(dedupeKey)) continue;
+                seen.add(dedupeKey);
+                let group = epicMap.get(el);
+                if (!group) {
+                  group = {
+                    label: el,
+                    title: el
+                      .slice(5)
+                      .split(/[-_]/)
+                      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+                      .join(" "),
+                    description: "",
+                    open: 0,
+                    closed: 0,
+                    total: 0,
+                    issues: [],
+                    html_url: `https://github.com/search?q=label%3A%22${encodeURIComponent(el)}%22+org%3Abemomentiq&type=issues`,
+                  };
+                  epicMap.set(el, group);
+                }
+                if (i.state === "open") group.open += 1;
+                else group.closed += 1;
+                group.total += 1;
+                group.issues.push({
+                  repo,
+                  number: i.number,
+                  title: i.title,
+                  state: i.state,
+                  html_url: i.html_url,
+                  labels,
+                  updated_at: i.updated_at,
+                });
+              }
+            }
+            if (items.length < 100) break;
           }
         } catch (err: any) {
-          errors.push(`${repo} issues:${state}: ${err?.message ?? err}`);
+          errors.push(`${repo} issues label=${epicLabel}: ${err?.message ?? err}`);
         }
       }
     }
