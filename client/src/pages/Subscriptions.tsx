@@ -35,11 +35,11 @@ function truncId(id: string): string {
 }
 
 export default function SubscriptionsPage() {
-  const { data, isLoading } = useQuery<SubscriptionsResp>({
+  const { data, isLoading, isError, error, refetch } = useQuery<SubscriptionsResp>({
     queryKey: ["/api/content-platform/subscriptions"],
   });
 
-  if (isLoading || !data) {
+  if (isLoading) {
     return (
       <Layout title="Subscriptions & Credits">
         <div className="text-muted-foreground">Loading{'…'}</div>
@@ -47,7 +47,32 @@ export default function SubscriptionsPage() {
     );
   }
 
-  if (!data.scriptsage_configured || !data.subscriptions) {
+  // Distinguish a real fetch failure (network/5xx) from the upstream
+  // explicitly reporting that ScriptSage isn't configured. Bugbot flagged
+  // that collapsing these to one empty-state hides errors.
+  if (isError || !data) {
+    return (
+      <Layout
+        title="Subscriptions & Credits"
+        subtitle="ScriptSage subscription tier mix and 30-day credit burn"
+      >
+        <div className="rounded-lg border border-destructive/40 bg-card p-8 text-center">
+          <h3 className="font-semibold text-sm mb-1">Failed to load subscriptions</h3>
+          <p className="text-xs text-muted-foreground mb-3">
+            {error instanceof Error ? error.message : "The /api/content-platform/subscriptions request failed."}
+          </p>
+          <button
+            onClick={() => refetch()}
+            className="text-xs px-3 py-1.5 rounded border border-card-border hover:bg-muted"
+          >
+            Retry
+          </button>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (!data.scriptsage_configured) {
     return (
       <Layout
         title="Subscriptions & Credits"
@@ -61,6 +86,30 @@ export default function SubscriptionsPage() {
             subscription telemetry. Showing empty state.
           </p>
         </section>
+      </Layout>
+    );
+  }
+
+  // Configured but upstream returned null subscriptions — surface as error,
+  // not as the "not configured" empty state.
+  if (!data.subscriptions) {
+    return (
+      <Layout
+        title="Subscriptions & Credits"
+        subtitle="ScriptSage subscription tier mix and 30-day credit burn"
+      >
+        <div className="rounded-lg border border-destructive/40 bg-card p-8 text-center">
+          <h3 className="font-semibold text-sm mb-1">Failed to load subscriptions from ScriptSage</h3>
+          <p className="text-xs text-muted-foreground mb-3">
+            ScriptSage is configured but returned no subscription data.
+          </p>
+          <button
+            onClick={() => refetch()}
+            className="text-xs px-3 py-1.5 rounded border border-card-border hover:bg-muted"
+          >
+            Retry
+          </button>
+        </div>
       </Layout>
     );
   }
