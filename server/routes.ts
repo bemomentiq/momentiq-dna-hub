@@ -134,6 +134,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
   });
 
+  // Subscriptions & credit burn — proxies ScriptSage. Returns empty payload
+  // (subscriptions: null) when the upstream is unconfigured so the page renders
+  // a graceful empty state.
+  app.get("/api/content-platform/subscriptions", async (_req, res) => {
+    const subs = await scriptsageClient.subscriptions();
+    res.json({
+      scriptsage_configured: scriptsageClient.configured(),
+      subscriptions: subs,
+      fetched_at: new Date().toISOString(),
+    });
+  });
+
   app.get("/api/actions", (_req, res) => {
     res.json(ACTIONS.map((a) => ({ ...a, extras: getExtras(a.action_name) })));
   });
