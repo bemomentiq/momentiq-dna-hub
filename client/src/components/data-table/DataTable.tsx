@@ -1,4 +1,4 @@
-import { ReactNode, useCallback, useMemo, useState, useEffect } from "react";
+import { ReactNode, useCallback, useMemo, useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { ArrowDown, ArrowUp, ArrowUpDown, Columns3, Download, Maximize2, Minimize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -42,6 +42,8 @@ export type DataTableProps<T> = {
 
 type Density = "compact" | "cozy";
 
+const INTERACTIVE_SELECTORS = "a, button, input, select, textarea, [role='button']";
+
 function densityFromStorage(fallback: Density): Density {
   if (typeof window === "undefined") return fallback;
   const v = window.localStorage.getItem("dnaHubTableDensity");
@@ -54,7 +56,15 @@ function visibleColsFromStorage(key: string, allKeys: string[], defaultHidden: S
   if (!raw) return new Set(allKeys.filter((k) => !defaultHidden.has(k)));
   try {
     const arr = JSON.parse(raw) as string[];
-    return new Set(arr.filter((k) => allKeys.includes(k)));
+    const saved = new Set(arr.filter((k) => allKeys.includes(k)));
+    // Merge in new columns that weren't in the saved set (Bug 3 fix)
+    const savedKeys = new Set(arr);
+    for (const k of allKeys) {
+      if (!savedKeys.has(k) && !defaultHidden.has(k)) {
+        saved.add(k);
+      }
+    }
+    return saved;
   } catch {
     return new Set(allKeys.filter((k) => !defaultHidden.has(k)));
   }
@@ -84,6 +94,15 @@ export function DataTable<T>(props: DataTableProps<T>) {
   const [density, setDensity] = useState<Density>(() => densityFromStorage(densityProp ?? "cozy"));
   const [visible, setVisible] = useState<Set<string>>(() => visibleColsFromStorage(storageKey, allKeys, defaultHidden));
 
+  // Bug 7 fix: re-sync visible state when storageKey changes
+  const prevStorageKey = useRef(storageKey);
+  useEffect(() => {
+    if (prevStorageKey.current !== storageKey) {
+      prevStorageKey.current = storageKey;
+      setVisible(visibleColsFromStorage(storageKey, allKeys, defaultHidden));
+    }
+  });
+
   useEffect(() => {
     if (typeof window !== "undefined") window.localStorage.setItem("dnaHubTableDensity", density);
   }, [density]);
@@ -107,7 +126,22 @@ export function DataTable<T>(props: DataTableProps<T>) {
     [colByKey],
   );
 
-  const { sorted, key: sortKey, dir: sortDir, toggle } = useSort(rows, sortAccessor, defaultSort?.key, defaultSort?.dir ?? "asc");
+  // Bug 6 fix: only apply defaultSort if the target column is sortable
+  const validDefaultSortKey = useMemo(() => {
+    if (!defaultSort?.key) return undefined;
+    const col = columns.find((c) => c.key === defaultSort.key);
+    if (col && col.sortable === false) return undefined;
+    return defaultSort.key;
+  }, [defaultSort?.key, columns]);
+
+  const { sorted, key: sortKey, dir: sortDir, toggle, clearSort } = useSort(rows, sortAccessor, validDefaultSortKey, defaultSort?.dir ?? "asc");
+
+  // Bug 4 fix: reset sort when sorted column becomes hidden
+  useEffect(() => {
+    if (sortKey && !visible.has(sortKey)) {
+      clearSort();
+    }
+  }, [visible, sortKey, clearSort]);
 
   const searchAccessors = useMemo(
     () => columns.filter((c) => c.searchable !== false).map((c) => c.accessor),
@@ -160,11 +194,16 @@ export function DataTable<T>(props: DataTableProps<T>) {
               <DropdownMenuCheckboxItem
                 key={c.key}
                 checked={visible.has(c.key)}
+                disabled={visible.has(c.key) && visible.size === 1}
                 onCheckedChange={(checked) => {
                   setVisible((prev) => {
                     const next = new Set(prev);
-                    if (checked) next.add(c.key);
-                    else next.delete(c.key);
+                    if (checked) {
+                      next.add(c.key);
+                    } else {
+                      if (next.size <= 1) return prev;
+                      next.delete(c.key);
+                    }
                     return next;
                   });
                 }}
@@ -226,10 +265,10 @@ export function DataTable<T>(props: DataTableProps<T>) {
             {filtered.length === 0 && (
               <tr>
                 <td
-                  colSpan={visibleColumns.length}
+                  colSpan={visibleColumns.length || 1}
                   className="px-4 py-10 text-center text-muted-foreground"
                 >
-                  {emptyMessage}
+                  {query.trim() ? "No results found" : emptyMessage}
                 </td>
               </tr>
             )}
@@ -238,7 +277,15 @@ export function DataTable<T>(props: DataTableProps<T>) {
               return (
                 <tr
                   key={rowKey(row)}
-                  onClick={href ? () => navigate(href) : undefined}
+                  onClick={
+                    href
+                      ? (e) => {
+                          const target = e.target as HTMLElement;
+                          if (target.closest(INTERACTIVE_SELECTORS)) return;
+                          navigate(href);
+                        }
+                      : undefined
+                  }
                   className={cn(
                     "border-t border-card-border",
                     href && "cursor-pointer hover:bg-muted/40",

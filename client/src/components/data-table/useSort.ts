@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 export type SortDir = "asc" | "desc";
 
@@ -10,6 +10,11 @@ export function useSort<T>(
 ) {
   const [key, setKey] = useState<string | null>(defaultKey ?? null);
   const [dir, setDir] = useState<SortDir>(defaultDir);
+
+  const keyRef = useRef(key);
+  keyRef.current = key;
+  const dirRef = useRef(dir);
+  dirRef.current = dir;
 
   const sorted = useMemo(() => {
     if (!key) return rows;
@@ -23,20 +28,22 @@ export function useSort<T>(
     return out;
   }, [rows, key, dir, accessor]);
 
-  function toggle(k: string) {
-    if (key !== k) {
+  const toggle = useCallback((k: string) => {
+    if (keyRef.current !== k) {
       setKey(k);
       setDir("asc");
       return;
     }
-    if (dir === "asc") {
+    if (dirRef.current === "asc") {
       setDir("desc");
       return;
     }
     setKey(null);
-  }
+  }, []);
 
-  return { sorted, key, dir, toggle };
+  const clearSort = useCallback(() => setKey(null), []);
+
+  return { sorted, key, dir, toggle, clearSort };
 }
 
 function compare(a: unknown, b: unknown): number {
