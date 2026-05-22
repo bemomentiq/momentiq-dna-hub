@@ -71,6 +71,37 @@ export type CorpusStats = {
   last_harvest_at: string | null;
 };
 
+export type BanditArmState = {
+  arm_id: string;
+  theme: string | null;
+  alpha: number;
+  beta: number;
+  mean: number;
+  samples: number;
+  last_updated_at: string | null;
+};
+
+export type BanditState = {
+  arms: BanditArmState[];
+  total_decisions: number;
+  exploration_ratio: number | null;
+  computed_at: string;
+};
+
+export type BanditLearningMetrics = {
+  regret_7d: number | null;
+  regret_30d: number | null;
+  win_rate_7d: number | null;
+  convergence_score: number | null;
+  computed_at: string;
+};
+
+export type BanditRegretPoint = {
+  ts: string;
+  cumulative_regret: number;
+  arm_id: string | null;
+};
+
 export function dnaConfigured(): boolean {
   return getBase().length > 0;
 }
@@ -126,4 +157,20 @@ export const dnaClient = {
     ),
   corpus: () =>
     cached("dna:corpus", 60_000, () => dnaGet<CorpusStats>("/api/dna/corpus-stats")),
+  bandit: {
+    state: () =>
+      cached("dna:bandit:state", 30_000, () =>
+        dnaGet<BanditState>("/api/v1/dna/bandit/state"),
+      ),
+    learningMetrics: () =>
+      cached("dna:bandit:learning", 30_000, () =>
+        dnaGet<BanditLearningMetrics>("/api/v1/dna/bandit/learning-metrics"),
+      ),
+    regret: (windowDays: number = 30) =>
+      cached(`dna:bandit:regret:${windowDays}`, 30_000, () =>
+        dnaGet<{ points: BanditRegretPoint[] }>(
+          `/api/v1/dna/bandit/regret?window_days=${windowDays}`,
+        ),
+      ),
+  },
 };

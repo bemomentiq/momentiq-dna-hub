@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Grid3x3, Map, GitPullRequest, Activity, DollarSign, Workflow, ClipboardCheck, Brain, Rocket, Send, Cpu, X, Gauge } from "lucide-react";
+import { LayoutDashboard, Grid3x3, Map, GitPullRequest, Activity, DollarSign, Workflow, ClipboardCheck, Brain, Rocket, Send, Cpu, X, Gauge, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
@@ -8,6 +8,7 @@ const items = [
   { href: "/themes", label: "Themes", icon: Grid3x3 },
   { href: "/ab-runs", label: "A/B Runs", icon: Activity },
   { href: "/scoring", label: "IDS Scoring", icon: Activity },
+  { href: "/bandit", label: "Bandit", icon: BarChart3 },
   { href: "/scriptsage", label: "ScriptSage", icon: Workflow },
   { href: "/veo-cost", label: "Veo Cost & ROI", icon: DollarSign },
   { href: "/subscriptions", label: "Subscriptions", icon: DollarSign },
