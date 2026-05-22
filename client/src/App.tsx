@@ -20,6 +20,7 @@ import Backlog from "@/pages/Backlog";
 import Run from "@/pages/Run";
 import Fleet from "@/pages/Fleet";
 import Autonomy from "@/pages/Autonomy";
+import Themes from "@/pages/Themes";
 import Scoring from "@/pages/Scoring";
 
 function AppRouter() {
@@ -32,6 +33,7 @@ function AppRouter() {
       <Route path="/run" component={Run} />
       <Route path="/fleet" component={Fleet} />
       <Route path="/autonomy" component={Autonomy} />
+      <Route path="/themes" component={Themes} />
       <Route path="/actions" component={AllActions} />
       <Route path="/actions/:name" component={ActionDetail} />
       <Route path="/roadmap" component={Roadmap} />
