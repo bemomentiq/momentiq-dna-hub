@@ -13,7 +13,18 @@ type VeoCallSummary = {
   avg_cost_per_video: number;
   winning_videos: number;
   cost_per_winner: number | null;
+  // Optional upstream-provided efficiency field; when absent we compute it
+  // client-side using the IDS promotion gate (0.85) as the per-winner score floor.
+  cost_per_ids_point?: number | null;
 };
+
+// $/IDS-point — cost efficiency normalised to the promotion gate. Returns null
+// when we have no winners to amortise across (avoids divide-by-zero).
+function computeCostPerIdsPoint(r: VeoCallSummary): number | null {
+  if (r.cost_per_ids_point != null) return r.cost_per_ids_point;
+  if (!r.winning_videos || r.winning_videos <= 0) return null;
+  return r.total_cost_usd / (r.winning_videos * 0.85);
+}
 
 type VeoCostResponse = {
   dna_configured: boolean;
@@ -66,8 +77,17 @@ const columns: Column<VeoCallSummary>[] = [
     render: (r) => <span className="tabular-nums">{r.winning_videos.toLocaleString()}</span>,
   },
   {
+    key: "cost_per_ids_point",
+    header: "$/IDS pt",
+    accessor: (r) => computeCostPerIdsPoint(r),
+    align: "right",
+    render: (r) => (
+      <span className="tabular-nums">{fmtUsd(computeCostPerIdsPoint(r))}</span>
+    ),
+  },
+  {
     key: "cost_per_winner",
-    header: "Cost / winner",
+    header: "$/winner",
     accessor: (r) => r.cost_per_winner,
     align: "right",
     render: (r) => <span className="tabular-nums">{fmtUsd(r.cost_per_winner)}</span>,
