@@ -161,6 +161,10 @@ export default function Overview() {
           icon={<DollarSign className="h-4 w-4" />}
           value={dna_configured ? fmtUsd(veo_spend_7d_usd, { compact: true }) : <NotConnected label="veo-spend" />}
           sub={dna_configured ? "Veo 3.1 generation cost" : "DNA_API_BASE unset"}
+          // Cost metric: rising spend should render red. delta stays null until the
+          // overview endpoint exposes a prior-week comparison field.
+          delta={null}
+          invertColors
         />
 
         <StatCard
@@ -172,6 +176,7 @@ export default function Overview() {
               ? `${fmtInt(scriptsage?.scripts_generated_7d)} over 7d`
               : "SCRIPTSAGE_API_BASE unset"
           }
+          delta={null}
         />
 
         <StatCard
@@ -183,6 +188,7 @@ export default function Overview() {
               ? `${fmtInt(scriptsage?.videos_generated_7d)} over 7d`
               : "SCRIPTSAGE_API_BASE unset"
           }
+          delta={null}
         />
 
         <StatCard
