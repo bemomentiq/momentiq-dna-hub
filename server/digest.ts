@@ -10,6 +10,90 @@
  */
 
 import { storage } from "./storage";
+import { dnaClient } from "./clients/dna";
+import { scriptsageClient } from "./clients/scriptsage";
+
+// ─── Content Platform KPI section ─────────────────────────────────────────────
+
+async function buildContentPlatformBlock(): Promise<string[]> {
+  const lines: string[] = [];
+  lines.push("*🧬 Content Platform KPIs*");
+
+  const [corpus, abRunning, abPromoted, ids, veo, ssStats, ssSubs] = await Promise.all([
+    dnaClient.corpus(),
+    dnaClient.abRuns({ status: "running", limit: 50 }),
+    dnaClient.abRuns({ status: "promoted", limit: 50 }),
+    dnaClient.idsDistribution(7),
+    dnaClient.veoCost(7),
+    scriptsageClient.stats(),
+    scriptsageClient.subscriptions(),
+  ]);
+
+  const dnaOk = dnaClient.configured();
+  const ssOk = scriptsageClient.configured();
+
+  if (!dnaOk && !ssOk) {
+    lines.push("_DNA + ScriptSage not configured — set DNA_API_BASE / SCRIPTSAGE_API_BASE to populate._");
+    return lines;
+  }
+
+  // Corpus
+  if (dnaOk) {
+    if (corpus) {
+      const gmv = corpus.gmv_usd != null ? `$${corpus.gmv_usd.toLocaleString()}` : "—";
+      lines.push(`• Corpus: ${corpus.videos.toLocaleString()} videos · GMV ${gmv}`);
+    } else {
+      lines.push(`• Corpus: _upstream error_`);
+    }
+  }
+
+  // A/B momentum
+  if (dnaOk) {
+    const running = abRunning?.runs.length ?? null;
+    const promoted = abPromoted?.runs.length ?? null;
+    lines.push(`• A/B: ${running ?? "—"} running · ${promoted ?? "—"} promoted lifetime`);
+  }
+
+  // IDS 7d
+  if (dnaOk) {
+    const overall = ids?.distributions.find((d) => d.dimension === "overall");
+    if (overall) {
+      const badge = overall.median >= 0.85 ? "✅" : overall.median >= 0.7 ? "⚠️" : "🔴";
+      lines.push(`• IDS (7d): ${badge} ${overall.median.toFixed(3)} median (n=${overall.n})`);
+    } else {
+      lines.push(`• IDS (7d): —`);
+    }
+  }
+
+  // Veo spend
+  if (dnaOk && veo) {
+    const total = veo.total_cost_usd?.toLocaleString() ?? "—";
+    const top3 = (veo.summary ?? [])
+      .sort((a, b) => b.total_cost_usd - a.total_cost_usd)
+      .slice(0, 3)
+      .map((t) => `${t.theme} $${t.total_cost_usd.toLocaleString()}`)
+      .join(", ");
+    lines.push(`• Veo spend (7d): $${total}${top3 ? ` — top: ${top3}` : ""}`);
+  }
+
+  // ScriptSage throughput
+  if (ssOk && ssStats) {
+    const fb = (ssStats.fallback_rate_24h * 100).toFixed(1);
+    const err = (ssStats.error_rate_24h * 100).toFixed(1);
+    lines.push(
+      `• ScriptSage (24h): ${ssStats.scripts_generated_24h} scripts · ${ssStats.videos_generated_24h} videos · ${fb}% fallback · ${err}% errors`,
+    );
+  } else if (ssOk) {
+    lines.push(`• ScriptSage: _upstream error_`);
+  }
+
+  // Subscriptions
+  if (ssOk && ssSubs) {
+    lines.push(`• Subscriptions: ${ssSubs.active_users.toLocaleString()} active · MRR $${ssSubs.mrr_usd.toLocaleString()}`);
+  }
+
+  return lines;
+}
 
 // ─── GitHub PR fetch ──────────────────────────────────────────────────────────
 
@@ -78,7 +162,12 @@ export async function buildDigestMarkdown(): Promise<string> {
   const lines: string[] = [];
 
   // ── Header ────────────────────────────────────────────────────────────────
-  lines.push(`🌅 *Overnight Autonomy Hub Digest — ${dateLabel}*`);
+  lines.push(`🌅 *Overnight Content Platform Hub Digest — ${dateLabel}*`);
+  lines.push("");
+
+  // ── Section 0: Content Platform KPIs (DNA + ScriptSage live) ─────────────
+  const cpBlock = await buildContentPlatformBlock();
+  lines.push(...cpBlock);
   lines.push("");
 
   // ── Section 1: PRs merged in last 24h ────────────────────────────────────
