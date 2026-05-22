@@ -1,6 +1,25 @@
 // Lightweight reachability probes for upstream content-platform services.
 // Bypasses the read cache — health should always be live.
 
+import { storage } from "../storage";
+
+function dnaBase(): string {
+  if (process.env.DNA_API_BASE) return process.env.DNA_API_BASE;
+  try { return (storage.getCronConfigSafe() as any)?.dna_api_base || ""; } catch { return ""; }
+}
+function dnaToken(): string | null {
+  if (process.env.DNA_API_TOKEN) return process.env.DNA_API_TOKEN;
+  try { return (storage.getCronConfigSafe() as any)?.dna_api_token || null; } catch { return null; }
+}
+function ssBase(): string {
+  if (process.env.SCRIPTSAGE_API_BASE) return process.env.SCRIPTSAGE_API_BASE;
+  try { return (storage.getCronConfigSafe() as any)?.scriptsage_api_base || ""; } catch { return ""; }
+}
+function ssToken(): string | null {
+  if (process.env.SCRIPTSAGE_API_TOKEN) return process.env.SCRIPTSAGE_API_TOKEN;
+  try { return (storage.getCronConfigSafe() as any)?.scriptsage_api_token || null; } catch { return null; }
+}
+
 type ServiceHealth = {
   configured: boolean;
   reachable: boolean | null;
@@ -51,15 +70,11 @@ async function probe(base: string, path: string, token: string | null): Promise<
 }
 
 export async function checkDnaHealth(): Promise<ServiceHealth> {
-  return probe(process.env.DNA_API_BASE || "", "/api/health", process.env.DNA_API_TOKEN || null);
+  return probe(dnaBase(), "/api/health", dnaToken());
 }
 
 export async function checkScriptsageHealth(): Promise<ServiceHealth> {
-  return probe(
-    process.env.SCRIPTSAGE_API_BASE || "",
-    "/api/admin/health",
-    process.env.SCRIPTSAGE_API_TOKEN || null,
-  );
+  return probe(ssBase(), "/api/admin/health", ssToken());
 }
 
 export async function checkKalodataHealth(companionUrl: string): Promise<ServiceHealth> {

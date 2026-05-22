@@ -3,9 +3,24 @@
 // so callers render empty-states instead of crashing.
 
 import { cached } from "./cache";
+import { storage } from "../storage";
 
-const BASE = process.env.SCRIPTSAGE_API_BASE || "";
-const TOKEN = process.env.SCRIPTSAGE_API_TOKEN || "";
+function getBase(): string {
+  if (process.env.SCRIPTSAGE_API_BASE) return process.env.SCRIPTSAGE_API_BASE;
+  try {
+    return (storage.getCronConfigSafe() as any)?.scriptsage_api_base || "";
+  } catch {
+    return "";
+  }
+}
+function getToken(): string {
+  if (process.env.SCRIPTSAGE_API_TOKEN) return process.env.SCRIPTSAGE_API_TOKEN;
+  try {
+    return (storage.getCronConfigSafe() as any)?.scriptsage_api_token || "";
+  } catch {
+    return "";
+  }
+}
 
 export type ScriptSageStats = {
   scripts_generated_24h: number;
@@ -32,15 +47,17 @@ export type JobStatus = {
 };
 
 export function scriptsageConfigured(): boolean {
-  return BASE.length > 0;
+  return getBase().length > 0;
 }
 
 async function ssGet<T>(path: string): Promise<T | null> {
-  if (!BASE) return null;
+  const base = getBase();
+  if (!base) return null;
+  const token = getToken();
   const headers: Record<string, string> = { Accept: "application/json" };
-  if (TOKEN) headers.Authorization = `Bearer ${TOKEN}`;
+  if (token) headers.Authorization = `Bearer ${token}`;
   try {
-    const r = await fetch(`${BASE.replace(/\/$/, "")}${path}`, { headers });
+    const r = await fetch(`${base.replace(/\/$/, "")}${path}`, { headers });
     if (!r.ok) return null;
     return (await r.json()) as T;
   } catch {

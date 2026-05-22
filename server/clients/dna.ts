@@ -3,9 +3,26 @@
 // can render empty-states instead of crashing in environments without access.
 
 import { cached } from "./cache";
+import { storage } from "../storage";
 
-const BASE = process.env.DNA_API_BASE || "";
-const TOKEN = process.env.DNA_API_TOKEN || "";
+// Resolve base + token at request time, env first then cron_config DB row.
+// This lets operators edit URLs from the autonomy page without redeploys.
+function getBase(): string {
+  if (process.env.DNA_API_BASE) return process.env.DNA_API_BASE;
+  try {
+    return (storage.getCronConfigSafe() as any)?.dna_api_base || "";
+  } catch {
+    return "";
+  }
+}
+function getToken(): string {
+  if (process.env.DNA_API_TOKEN) return process.env.DNA_API_TOKEN;
+  try {
+    return (storage.getCronConfigSafe() as any)?.dna_api_token || "";
+  } catch {
+    return "";
+  }
+}
 
 export type ThemeOptimalConfig = {
   theme: string;
@@ -55,15 +72,17 @@ export type CorpusStats = {
 };
 
 export function dnaConfigured(): boolean {
-  return BASE.length > 0;
+  return getBase().length > 0;
 }
 
 async function dnaGet<T>(path: string): Promise<T | null> {
-  if (!BASE) return null;
+  const base = getBase();
+  if (!base) return null;
+  const token = getToken();
   const headers: Record<string, string> = { Accept: "application/json" };
-  if (TOKEN) headers.Authorization = `Bearer ${TOKEN}`;
+  if (token) headers.Authorization = `Bearer ${token}`;
   try {
-    const r = await fetch(`${BASE.replace(/\/$/, "")}${path}`, { headers });
+    const r = await fetch(`${base.replace(/\/$/, "")}${path}`, { headers });
     if (!r.ok) return null;
     return (await r.json()) as T;
   } catch {
