@@ -251,14 +251,27 @@ export default function PipelineHealth() {
 
   const anyLoading =
     queueQ.isLoading || failuresQ.isLoading || errorsQ.isLoading || funnelQ.isLoading;
-  const anyError = queueQ.isError && failuresQ.isError && errorsQ.isError && funnelQ.isError;
+  const anyError = queueQ.isError || failuresQ.isError || errorsQ.isError || funnelQ.isError;
 
-  const heatmapCells: HeatmapCell[] = failures.map((f) => ({
-    x: f.category,
-    y: f.pipeline,
-    value: f.count_24h,
-    label: `${f.pipeline} · ${f.category}\n${f.error_signature}\n24h: ${f.count_24h} · 7d: ${f.count_7d}`,
-  }));
+  const heatmapCells: HeatmapCell[] = (() => {
+    const agg = new Map<string, { pipeline: string; category: string; count24h: number; count7d: number }>();
+    for (const f of failures) {
+      const key = `${f.pipeline}::${f.category}`;
+      const prev = agg.get(key);
+      if (prev) {
+        prev.count24h += f.count_24h;
+        prev.count7d += f.count_7d;
+      } else {
+        agg.set(key, { pipeline: f.pipeline, category: f.category, count24h: f.count_24h, count7d: f.count_7d });
+      }
+    }
+    return Array.from(agg.values()).map((a) => ({
+      x: a.category,
+      y: a.pipeline,
+      value: a.count24h,
+      label: `${a.pipeline} · ${a.category}\n24h: ${a.count24h} · 7d: ${a.count7d}`,
+    }));
+  })();
 
   return (
     <Layout
@@ -330,7 +343,7 @@ export default function PipelineHealth() {
       ) : anyError ? (
         <ErrorState
           title="Failed to load pipeline health"
-          error={new Error("All ScriptSage monitoring endpoints failed.")}
+          error={queueQ.error ?? failuresQ.error ?? errorsQ.error ?? funnelQ.error ?? new Error("ScriptSage monitoring endpoint failed.")}
           onRetry={() => {
             queueQ.refetch();
             failuresQ.refetch();
