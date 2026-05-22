@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
+import { Skeleton, EmptyState, ErrorState } from "@/components/states";
 
 type ThemeOptimalConfig = {
   theme: string;
@@ -36,7 +37,7 @@ function fmtDate(s: string | null): string {
 }
 
 export default function Themes() {
-  const { data, isLoading } = useQuery<ThemesResponse>({
+  const { data, isLoading, isError, error, refetch } = useQuery<ThemesResponse>({
     queryKey: ["/api/content-platform/themes"],
   });
   const themes = data?.themes ?? [];
@@ -51,10 +52,19 @@ export default function Themes() {
           : "DNA service not configured"
       }
     >
-      {!isLoading && !dnaConfigured ? (
-        <div className="rounded-lg border border-card-border bg-card p-10 text-center text-sm text-muted-foreground">
-          Configure DNA_API_BASE to see themes
-        </div>
+      {isLoading ? (
+        <Skeleton lines={6} />
+      ) : isError ? (
+        <ErrorState title="Failed to load themes" error={error} onRetry={() => refetch()} />
+      ) : !dnaConfigured ? (
+        <EmptyState
+          title="Themes not configured"
+          description={
+            <>
+              Set <code className="font-mono">DNA_API_BASE</code> to populate this section.
+            </>
+          }
+        />
       ) : (
         <div className="rounded-lg border border-card-border bg-card overflow-hidden">
           <table className="w-full text-sm">

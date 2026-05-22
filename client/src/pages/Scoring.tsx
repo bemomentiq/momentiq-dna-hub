@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
+import { Skeleton, EmptyState, ErrorState } from "@/components/states";
 import { cn } from "@/lib/utils";
 
 type Dimension =
@@ -82,7 +83,7 @@ export default function Scoring() {
   if (isLoading) {
     return (
       <Layout title="IDS Scoring" subtitle="Indistinguishability score distribution (7-day window).">
-        <div className="text-sm text-muted-foreground">Loading…</div>
+        <Skeleton lines={6} />
       </Layout>
     );
   }
@@ -93,18 +94,11 @@ export default function Scoring() {
   if (isError || !data) {
     return (
       <Layout title="IDS Scoring" subtitle="Indistinguishability score distribution (7-day window).">
-        <div className="rounded-lg border border-destructive/40 bg-card p-8 text-center">
-          <h3 className="font-semibold text-sm mb-1">Failed to load IDS distribution</h3>
-          <p className="text-xs text-muted-foreground mb-3">
-            {error instanceof Error ? error.message : "The /api/content-platform/ids-distribution request failed."}
-          </p>
-          <button
-            onClick={() => refetch()}
-            className="text-xs px-3 py-1.5 rounded border border-card-border hover:bg-muted"
-          >
-            Retry
-          </button>
-        </div>
+        <ErrorState
+          title="Failed to load IDS distribution"
+          error={error ?? new Error("The /api/content-platform/ids-distribution request failed.")}
+          onRetry={() => refetch()}
+        />
       </Layout>
     );
   }
@@ -115,13 +109,15 @@ export default function Scoring() {
         title="IDS Scoring"
         subtitle="Indistinguishability score distribution (7-day window)."
       >
-        <div className="rounded-lg border border-card-border bg-card p-8 text-center">
-          <h3 className="font-semibold text-sm mb-1">DNA service not configured</h3>
-          <p className="text-xs text-muted-foreground">
-            Set <code className="font-mono">DNA_API_BASE</code> to populate IDS scoring. Promotion criterion is
-            indistinguishability ≥ 0.85 across all 5 dimensions for TikTok Shop creatives.
-          </p>
-        </div>
+        <EmptyState
+          title="DNA service not configured"
+          description={
+            <>
+              Set <code className="font-mono">DNA_API_BASE</code> to populate IDS scoring. Promotion criterion is
+              indistinguishability ≥ 0.85 across all 5 dimensions for TikTok Shop creatives.
+            </>
+          }
+        />
       </Layout>
     );
   }

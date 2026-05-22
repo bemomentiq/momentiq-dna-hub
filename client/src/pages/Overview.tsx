@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import { StatCard } from "@/components/StatCard";
+import { Skeleton } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
 import { Video, FlaskConical, Target, DollarSign, FileText, Film, AlertTriangle, Users } from "lucide-react";
 
@@ -93,7 +94,7 @@ export default function Overview() {
   if (isLoading || !data) {
     return (
       <Layout title="Content Platform Overview">
-        <div className="text-muted-foreground">Loading…</div>
+        <Skeleton lines={6} />
       </Layout>
     );
   }

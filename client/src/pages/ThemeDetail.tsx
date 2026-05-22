@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useParams, Link } from "wouter";
 import { Layout } from "@/components/Layout";
 import { StatCard } from "@/components/StatCard";
+import { Skeleton, EmptyState, ErrorState } from "@/components/states";
 import { ArrowLeft, Activity, DollarSign, TrendingUp, GitBranch, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -84,7 +85,7 @@ export default function ThemeDetail() {
   if (isLoading) {
     return (
       <Layout title="Loading…">
-        <div className="text-muted-foreground">Loading theme…</div>
+        <Skeleton lines={6} />
       </Layout>
     );
   }
@@ -105,19 +106,11 @@ export default function ThemeDetail() {
   if (isError || !data) {
     return (
       <Layout title={slug ?? "Theme"} subtitle="Per-theme drill-down" actions={backLink}>
-        <div className="rounded-lg border border-destructive/40 bg-card p-8 text-center">
-          <h3 className="font-semibold text-sm mb-1">Failed to load theme</h3>
-          <p className="text-xs text-muted-foreground mb-3">
-            {error instanceof Error ? error.message : "The /api/content-platform/themes request failed."}
-          </p>
-          <button
-            onClick={() => refetch()}
-            className="text-xs px-3 py-1.5 rounded border border-card-border hover:bg-muted"
-            data-testid="button-retry"
-          >
-            Retry
-          </button>
-        </div>
+        <ErrorState
+          title="Failed to load theme"
+          error={error ?? new Error("The /api/content-platform/themes request failed.")}
+          onRetry={() => refetch()}
+        />
       </Layout>
     );
   }
@@ -125,14 +118,14 @@ export default function ThemeDetail() {
   if (!data.dna_configured) {
     return (
       <Layout title={slug ?? "Theme"} subtitle="Per-theme drill-down" actions={backLink}>
-        <div className="rounded-lg border border-dashed border-card-border bg-card p-8 text-center">
-          <Sparkles className="h-6 w-6 mx-auto text-muted-foreground mb-2" />
-          <div className="font-medium">DNA service not configured</div>
-          <p className="text-sm text-muted-foreground mt-1">
-            Set <code className="font-mono text-xs">DNA_API_BASE</code> on the server to enable
-            theme drill-downs.
-          </p>
-        </div>
+        <EmptyState
+          title="DNA service not configured"
+          description={
+            <>
+              Set <code className="font-mono">DNA_API_BASE</code> on the server to enable theme drill-downs.
+            </>
+          }
+        />
       </Layout>
     );
   }

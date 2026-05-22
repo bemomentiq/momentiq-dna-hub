@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
+import { Skeleton, EmptyState, ErrorState } from "@/components/states";
 import { DollarSign, Users } from "lucide-react";
 
 type SubscriptionsResp = {
@@ -42,7 +43,7 @@ export default function SubscriptionsPage() {
   if (isLoading) {
     return (
       <Layout title="Subscriptions & Credits">
-        <div className="text-muted-foreground">Loading{'…'}</div>
+        <Skeleton lines={6} />
       </Layout>
     );
   }
@@ -56,18 +57,11 @@ export default function SubscriptionsPage() {
         title="Subscriptions & Credits"
         subtitle="ScriptSage subscription tier mix and 30-day credit burn"
       >
-        <div className="rounded-lg border border-destructive/40 bg-card p-8 text-center">
-          <h3 className="font-semibold text-sm mb-1">Failed to load subscriptions</h3>
-          <p className="text-xs text-muted-foreground mb-3">
-            {error instanceof Error ? error.message : "The /api/content-platform/subscriptions request failed."}
-          </p>
-          <button
-            onClick={() => refetch()}
-            className="text-xs px-3 py-1.5 rounded border border-card-border hover:bg-muted"
-          >
-            Retry
-          </button>
-        </div>
+        <ErrorState
+          title="Failed to load subscriptions"
+          error={error ?? new Error("The /api/content-platform/subscriptions request failed.")}
+          onRetry={() => refetch()}
+        />
       </Layout>
     );
   }
@@ -78,14 +72,14 @@ export default function SubscriptionsPage() {
         title="Subscriptions & Credits"
         subtitle="ScriptSage subscription tier mix and 30-day credit burn"
       >
-        <section className="rounded-lg border border-card-border bg-card p-8 text-center">
-          <DollarSign className="h-8 w-8 mx-auto mb-3 text-muted-foreground" />
-          <h2 className="text-base font-semibold mb-1">ScriptSage not configured</h2>
-          <p className="text-sm text-muted-foreground">
-            Set <code className="text-xs">SCRIPTSAGE_API_BASE</code> to enable
-            subscription telemetry. Showing empty state.
-          </p>
-        </section>
+        <EmptyState
+          title="ScriptSage not configured"
+          description={
+            <>
+              Set <code className="font-mono">SCRIPTSAGE_API_BASE</code> to populate this section.
+            </>
+          }
+        />
       </Layout>
     );
   }
@@ -98,18 +92,11 @@ export default function SubscriptionsPage() {
         title="Subscriptions & Credits"
         subtitle="ScriptSage subscription tier mix and 30-day credit burn"
       >
-        <div className="rounded-lg border border-destructive/40 bg-card p-8 text-center">
-          <h3 className="font-semibold text-sm mb-1">Failed to load subscriptions from ScriptSage</h3>
-          <p className="text-xs text-muted-foreground mb-3">
-            ScriptSage is configured but returned no subscription data.
-          </p>
-          <button
-            onClick={() => refetch()}
-            className="text-xs px-3 py-1.5 rounded border border-card-border hover:bg-muted"
-          >
-            Retry
-          </button>
-        </div>
+        <ErrorState
+          title="Failed to load subscriptions from ScriptSage"
+          error={new Error("ScriptSage is configured but returned no subscription data.")}
+          onRetry={() => refetch()}
+        />
       </Layout>
     );
   }

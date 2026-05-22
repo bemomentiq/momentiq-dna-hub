@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
+import { Skeleton, EmptyState, ErrorState } from "@/components/states";
 import { DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -82,36 +83,32 @@ export default function VeoCost() {
       </div>
 
       {isLoading ? (
-        <div className="text-muted-foreground">Loading…</div>
+        <Skeleton lines={6} />
       ) : isError || !data || data.upstream_error ? (
         // Distinguish a real fetch failure (network/5xx/upstream null) from
         // the upstream explicitly reporting that DNA isn't configured.
         // Bugbot flagged that collapsing these to one empty-state hides errors.
-        <div className="rounded-lg border border-destructive/40 bg-card p-8 text-center">
-          <h3 className="font-semibold text-sm mb-1">Failed to load Veo cost</h3>
-          <p className="text-xs text-muted-foreground mb-3">
-            {error instanceof Error
-              ? error.message
-              : data?.upstream_error
+        <ErrorState
+          title="Failed to load Veo cost"
+          error={
+            error ??
+            new Error(
+              data?.upstream_error
                 ? "Upstream momentiq-dna request failed."
-                : "The /api/content-platform/veo-cost request failed."}
-          </p>
-          <button
-            onClick={() => refetch()}
-            data-testid="veo-cost-retry"
-            className="text-xs px-3 py-1.5 rounded border border-card-border hover:bg-muted"
-          >
-            Retry
-          </button>
-        </div>
+                : "The /api/content-platform/veo-cost request failed."
+            )
+          }
+          onRetry={() => refetch()}
+        />
       ) : data.dna_configured === false ? (
-        <div className="rounded-lg border border-card-border bg-card p-8 text-center">
-          <div className="text-sm font-semibold mb-1">DNA service not configured</div>
-          <p className="text-sm text-muted-foreground">
-            Set <code className="text-xs px-1 py-0.5 rounded bg-muted">DNA_API_BASE</code> to connect the
-            momentiq-dna upstream and populate Veo cost data.
-          </p>
-        </div>
+        <EmptyState
+          title="DNA service not configured"
+          description={
+            <>
+              Set <code className="font-mono">DNA_API_BASE</code> to populate this section.
+            </>
+          }
+        />
       ) : rows.length === 0 ? (
         <div className="rounded-lg border border-card-border bg-card p-8 text-center text-sm text-muted-foreground">
           No Veo calls in the last {data.window_days} days.

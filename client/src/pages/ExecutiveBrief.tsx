@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
+import { Skeleton, ErrorState } from "@/components/states";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { TrendingUp, Sparkles, AlertOctagon, DollarSign, ExternalLink } from "lucide-react";
@@ -200,15 +201,9 @@ export default function ExecutiveBrief() {
           </CardHeader>
           <CardContent>
             {promoPending ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
+              <Skeleton lines={3} />
             ) : promoIsError ? (
-              <div
-                className="text-sm text-rose-600 dark:text-rose-400 p-3 rounded-md border border-rose-500/30 bg-rose-500/5"
-                data-testid="promo-error"
-              >
-                Failed to load promotion candidates
-                {promoError instanceof Error ? ` — ${promoError.message}` : ""}
-              </div>
+              <ErrorState title="Failed to load promotion candidates" error={promoError} />
             ) : candidates.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 {dash} no completed runs currently clear the promotion gate.
@@ -256,15 +251,9 @@ export default function ExecutiveBrief() {
           </CardHeader>
           <CardContent>
             {blockersIsError ? (
-              <div
-                className="text-sm text-rose-600 dark:text-rose-400 p-3 rounded-md border border-rose-500/30 bg-rose-500/5"
-                data-testid="blockers-error"
-              >
-                Failed to load blockers from GitHub
-                {blockersError instanceof Error ? ` — ${blockersError.message}` : ""}
-              </div>
+              <ErrorState title="Failed to load blockers from GitHub" error={blockersError} />
             ) : blockersPending ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
+              <Skeleton lines={3} />
             ) : blockers.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 {dash} no open blockers across content repos.

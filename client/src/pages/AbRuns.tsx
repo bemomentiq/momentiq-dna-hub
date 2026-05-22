@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
+import { Skeleton, EmptyState, ErrorState } from "@/components/states";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Activity, CheckCircle2 } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Mirrors server/clients/dna.ts AbRun shape — values from upstream may be null
@@ -65,7 +66,7 @@ function fmtDate(v: string | null): string {
 
 export default function AbRuns() {
   const [status, setStatus] = useState<StatusFilter>("running");
-  const { data, isLoading } = useQuery<AbRunsResponse>({
+  const { data, isLoading, isError, error, refetch } = useQuery<AbRunsResponse>({
     queryKey: [`/api/content-platform/ab-runs?status=${status}&limit=100`],
   });
 
@@ -88,14 +89,19 @@ export default function AbRuns() {
         </TabsList>
       </Tabs>
 
-      {!dnaConfigured ? (
-        <section className="rounded-lg border border-card-border bg-card p-10 text-center">
-          <Activity className="h-6 w-6 mx-auto text-muted-foreground mb-2" />
-          <h3 className="font-semibold text-sm">A/B runs unavailable</h3>
-          <p className="text-xs text-muted-foreground mt-1 max-w-md mx-auto">
-            The momentiq-dna service is not configured for this environment. Set <code className="font-mono">DNA_API_BASE</code> on the hub server to view live A/B experiment data.
-          </p>
-        </section>
+      {isLoading && !data ? (
+        <Skeleton lines={6} />
+      ) : isError ? (
+        <ErrorState title="Failed to load A/B runs" error={error} onRetry={() => refetch()} />
+      ) : !dnaConfigured ? (
+        <EmptyState
+          title="A/B runs not configured"
+          description={
+            <>
+              Set <code className="font-mono">DNA_API_BASE</code> to populate this section.
+            </>
+          }
+        />
       ) : (
         <section>
           <div className="flex items-center justify-between mb-3">
