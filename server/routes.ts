@@ -342,6 +342,37 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
   });
 
+  // Veo cost & ROI by theme — proxies dnaClient.veoCost. Returns
+  // { dna_configured, summary, total_cost_usd, window_days }. When dna is not
+  // configured (DNA_API_BASE unset) the upstream returns null and we surface
+  // an empty payload so the page can render its empty-state.
+  app.get("/api/content-platform/veo-cost", async (req, res) => {
+    const raw = parseInt(String(req.query.window_days ?? "7"), 10);
+    const windowDays = [7, 14, 30].includes(raw) ? raw : 7;
+    const configured = dnaClient.configured();
+    const upstream = await dnaClient.veoCost(windowDays);
+    // When DNA is configured but veoCost returns null, that's an upstream
+    // failure (network/5xx) — surface it as 502 with upstream_error so the
+    // client can render a distinct error state instead of collapsing to
+    // "no Veo calls". Bugbot flagged this on PR #19.
+    if (configured && upstream === null) {
+      return void res.status(502).json({
+        dna_configured: true,
+        upstream_error: true,
+        summary: [],
+        total_cost_usd: 0,
+        window_days: windowDays,
+      });
+    }
+    res.json({
+      dna_configured: configured,
+      upstream_error: false,
+      summary: upstream?.summary ?? [],
+      total_cost_usd: upstream?.total_cost_usd ?? 0,
+      window_days: upstream?.window_days ?? windowDays,
+    });
+  });
+
   // Per-theme drill-down: champion config + variants (A/B runs).
   // Returns { dna_configured, theme, variants } so the client can render an
   // empty-state when DNA_API_BASE is unset, instead of 502'ing.

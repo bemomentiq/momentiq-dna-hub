@@ -14,6 +14,7 @@ import Evals from "@/pages/Evals";
 import Issues from "@/pages/Issues";
 import ExecutiveBrief from "@/pages/ExecutiveBrief";
 import MoneyPath from "@/pages/MoneyPath";
+import VeoCost from "@/pages/VeoCost";
 import HitlBurden from "@/pages/HitlBurden";
 import DataPipeline from "@/pages/DataPipeline";
 import Explorer from "@/pages/Explorer";
@@ -44,6 +45,7 @@ function AppRouter() {
       <Route path="/evals" component={Evals} />
       <Route path="/hitl" component={HitlBurden} />
       <Route path="/money-path" component={MoneyPath} />
+      <Route path="/veo-cost" component={VeoCost} />
       <Route path="/issues" component={Issues} />
       <Route component={NotFound} />
     </Switch>
