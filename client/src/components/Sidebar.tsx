@@ -10,6 +10,7 @@ const items = [
   { href: "/scoring", label: "IDS Scoring", icon: Activity },
   { href: "/bandit", label: "Bandit", icon: BarChart3 },
   { href: "/scriptsage", label: "ScriptSage", icon: Workflow },
+  { href: "/pipeline-health", label: "Pipeline Health", icon: Activity },
   { href: "/veo-cost", label: "Veo Cost & ROI", icon: DollarSign },
   { href: "/subscriptions", label: "Subscriptions", icon: DollarSign },
   { href: "/roadmap", label: "Roadmap", icon: Map },

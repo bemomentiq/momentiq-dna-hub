@@ -9,6 +9,7 @@ import Overview from "@/pages/Overview";
 import Roadmap from "@/pages/Roadmap";
 import AbRuns from "@/pages/AbRuns";
 import ScriptSage from "@/pages/ScriptSage";
+import PipelineHealth from "@/pages/PipelineHealth";
 import Issues from "@/pages/Issues";
 import ExecutiveBrief from "@/pages/ExecutiveBrief";
 import VeoCost from "@/pages/VeoCost";
@@ -40,6 +41,7 @@ function AppRouter() {
       <Route path="/scoring" component={Scoring} />
       <Route path="/bandit" component={Bandit} />
       <Route path="/scriptsage" component={ScriptSage} />
+      <Route path="/pipeline-health" component={PipelineHealth} />
       <Route path="/veo-cost" component={VeoCost} />
       <Route path="/subscriptions" component={Subscriptions} />
       <Route path="/roadmap" component={Roadmap} />
