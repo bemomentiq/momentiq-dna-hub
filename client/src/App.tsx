@@ -21,6 +21,7 @@ import Autonomy from "@/pages/Autonomy";
 import Themes from "@/pages/Themes";
 import Scoring from "@/pages/Scoring";
 import ThemeDetail from "@/pages/ThemeDetail";
+import Bandit from "@/pages/Bandit";
 import DataTableDemo from "@/pages/dev/DataTableDemo";
 
 function AppRouter() {
@@ -37,6 +38,7 @@ function AppRouter() {
       <Route path="/themes/:slug" component={ThemeDetail} />
       <Route path="/ab-runs" component={AbRuns} />
       <Route path="/scoring" component={Scoring} />
+      <Route path="/bandit" component={Bandit} />
       <Route path="/scriptsage" component={ScriptSage} />
       <Route path="/veo-cost" component={VeoCost} />
       <Route path="/subscriptions" component={Subscriptions} />
