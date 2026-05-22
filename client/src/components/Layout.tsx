@@ -3,6 +3,7 @@ import { Sidebar } from "./Sidebar";
 import { Menu } from "lucide-react";
 import { LastUpdated } from "./LastUpdated";
 import { RefreshAll } from "./RefreshAll";
+import { PollingControl } from "./PollingControl";
 
 export function Layout({
   children,
@@ -42,6 +43,7 @@ export function Layout({
             </div>
             <div className="shrink-0 hidden sm:flex items-center gap-2">
               <LastUpdated />
+              <PollingControl />
               <RefreshAll />
               {actions}
             </div>
@@ -49,6 +51,7 @@ export function Layout({
           {/* On very narrow screens, drop the actions onto a second row so the title doesn't get squeezed. */}
           <div className="sm:hidden border-t border-border/50 px-4 py-2 flex items-center gap-2 overflow-x-auto">
             <LastUpdated />
+            <PollingControl />
             <RefreshAll />
             {actions}
           </div>

@@ -40,13 +40,19 @@ export const getQueryFn: <T>(options: {
     return await res.json();
   };
 
+// Centralized defaults: short stale window keeps data fresh across navigation;
+// gcTime keeps cached pages around for 5 min; refetch on focus/reconnect by
+// default so users returning to a tab see current data. PollingControl can
+// flip these at runtime to globally pause polling.
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       queryFn: getQueryFn({ on401: "throw" }),
       refetchInterval: false,
-      refetchOnWindowFocus: false,
-      staleTime: Infinity,
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
+      staleTime: 30_000,
+      gcTime: 300_000,
       retry: false,
     },
     mutations: {
