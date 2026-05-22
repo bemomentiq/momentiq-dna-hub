@@ -2,6 +2,8 @@
 // Base URL is read from DNA_API_BASE; when unset, helpers return null so callers
 // can render empty-states instead of crashing in environments without access.
 
+import { cached } from "./cache";
+
 const BASE = process.env.DNA_API_BASE || "";
 const TOKEN = process.env.DNA_API_TOKEN || "";
 
@@ -69,24 +71,40 @@ async function dnaGet<T>(path: string): Promise<T | null> {
   }
 }
 
+// All read helpers go through a 30–60s TTL cache so the hub doesn't hammer
+// momentiq-dna on every page render. Mutations should bust cache via cacheBust.
 export const dnaClient = {
   configured: dnaConfigured,
-  themes: () => dnaGet<{ themes: ThemeOptimalConfig[] }>("/api/dna/themes"),
+  themes: () =>
+    cached("dna:themes", 60_000, () =>
+      dnaGet<{ themes: ThemeOptimalConfig[] }>("/api/dna/themes"),
+    ),
   theme: (slug: string) =>
-    dnaGet<{ theme: ThemeOptimalConfig; variants: AbRun[] }>(`/api/dna/themes/${encodeURIComponent(slug)}`),
+    cached(`dna:theme:${slug}`, 60_000, () =>
+      dnaGet<{ theme: ThemeOptimalConfig; variants: AbRun[] }>(
+        `/api/dna/themes/${encodeURIComponent(slug)}`,
+      ),
+    ),
   abRuns: (opts: { status?: string; limit?: number } = {}) => {
     const q = new URLSearchParams();
     if (opts.status) q.set("status", opts.status);
     if (opts.limit) q.set("limit", String(opts.limit));
-    return dnaGet<{ runs: AbRun[] }>(`/api/dna/ab-runs?${q}`);
+    return cached(`dna:abRuns:${q}`, 30_000, () =>
+      dnaGet<{ runs: AbRun[] }>(`/api/dna/ab-runs?${q}`),
+    );
   },
   veoCost: (windowDays: number = 7) =>
-    dnaGet<{ summary: VeoCallSummary[]; total_cost_usd: number; window_days: number }>(
-      `/api/dna/veo-cost?window_days=${windowDays}`
+    cached(`dna:veoCost:${windowDays}`, 30_000, () =>
+      dnaGet<{ summary: VeoCallSummary[]; total_cost_usd: number; window_days: number }>(
+        `/api/dna/veo-cost?window_days=${windowDays}`,
+      ),
     ),
   idsDistribution: (windowDays: number = 7) =>
-    dnaGet<{ distributions: IdsDistribution[]; window_days: number }>(
-      `/api/dna/ids-distribution?window_days=${windowDays}`
+    cached(`dna:ids:${windowDays}`, 30_000, () =>
+      dnaGet<{ distributions: IdsDistribution[]; window_days: number }>(
+        `/api/dna/ids-distribution?window_days=${windowDays}`,
+      ),
     ),
-  corpus: () => dnaGet<CorpusStats>("/api/dna/corpus-stats"),
+  corpus: () =>
+    cached("dna:corpus", 60_000, () => dnaGet<CorpusStats>("/api/dna/corpus-stats")),
 };

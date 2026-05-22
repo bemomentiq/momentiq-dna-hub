@@ -2,6 +2,8 @@
 // Base URL is read from SCRIPTSAGE_API_BASE; when unset, helpers return null
 // so callers render empty-states instead of crashing.
 
+import { cached } from "./cache";
+
 const BASE = process.env.SCRIPTSAGE_API_BASE || "";
 const TOKEN = process.env.SCRIPTSAGE_API_TOKEN || "";
 
@@ -48,7 +50,8 @@ async function ssGet<T>(path: string): Promise<T | null> {
 
 export const scriptsageClient = {
   configured: scriptsageConfigured,
-  stats: () => ssGet<ScriptSageStats>("/api/admin/stats"),
-  subscriptions: () => ssGet<SubscriptionStats>("/api/admin/subscriptions"),
-  jobs: () => ssGet<{ jobs: JobStatus[] }>("/api/admin/jobs"),
+  stats: () => cached("ss:stats", 30_000, () => ssGet<ScriptSageStats>("/api/admin/stats")),
+  subscriptions: () =>
+    cached("ss:subs", 60_000, () => ssGet<SubscriptionStats>("/api/admin/subscriptions")),
+  jobs: () => cached("ss:jobs", 30_000, () => ssGet<{ jobs: JobStatus[] }>("/api/admin/jobs")),
 };

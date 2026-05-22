@@ -16,6 +16,8 @@ import { storage } from "./storage";
 import { buildDigestMarkdown } from "./digest";
 import { dnaClient } from "./clients/dna";
 import { scriptsageClient } from "./clients/scriptsage";
+import { checkDnaHealth, checkScriptsageHealth, checkKalodataHealth } from "./clients/health";
+import { cacheStats, cacheBust } from "./clients/cache";
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   registerExplorerRoutes(app);
@@ -129,6 +131,35 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       subscriptions: ssSubs,
       fetched_at: new Date().toISOString(),
     });
+  });
+
+  // Reachability probes for upstream content-platform services. Bypasses the
+  // read cache — sidebar pill / monitors should see live status.
+  app.get("/api/content-platform/health", async (_req, res) => {
+    const cfg = storage.getCronConfig() as any;
+    const companionUrl = cfg.companion_site_url || process.env.KALODATA_API_URL || "";
+    const [dna, ss, kalo] = await Promise.all([
+      checkDnaHealth(),
+      checkScriptsageHealth(),
+      companionUrl ? checkKalodataHealth(companionUrl) : Promise.resolve({
+        configured: false,
+        reachable: null,
+        latency_ms: null,
+        checked_at: new Date().toISOString(),
+        error: null,
+      }),
+    ]);
+    res.json({ dna, scriptsage: ss, kalodata: kalo, fetched_at: new Date().toISOString() });
+  });
+
+  // Cache introspection + bust (ops-only; useful from the autonomy page).
+  app.get("/api/content-platform/cache", (_req, res) => {
+    res.json(cacheStats());
+  });
+  app.post("/api/content-platform/cache/bust", (req, res) => {
+    const prefix = (req.query.prefix as string) || undefined;
+    const n = cacheBust(prefix);
+    res.json({ busted: n, prefix: prefix ?? "(all)" });
   });
 
   // SID-era endpoints removed during content-platform redesign:
