@@ -1,5 +1,5 @@
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useUrlState } from "@/hooks/useUrlState";
 import { Layout } from "@/components/Layout";
 import { Skeleton, EmptyState, ErrorState } from "@/components/states";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -65,7 +65,7 @@ function fmtDate(v: string | null): string {
 }
 
 export default function AbRuns() {
-  const [status, setStatus] = useState<StatusFilter>("running");
+  const [status, setStatus] = useUrlState<StatusFilter>("status", "running");
   const { data, isLoading, isError, error, refetch } = useQuery<AbRunsResponse>({
     queryKey: [`/api/content-platform/ab-runs?status=${status}&limit=100`],
   });

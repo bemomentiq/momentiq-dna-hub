@@ -1,9 +1,9 @@
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import { Skeleton, EmptyState, ErrorState } from "@/components/states";
 import { DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useUrlState } from "@/hooks/useUrlState";
 
 type VeoCallSummary = {
   theme: string;
@@ -30,7 +30,9 @@ function fmtUsd(n: number | null | undefined): string {
 }
 
 export default function VeoCost() {
-  const [windowDays, setWindowDays] = useState<number>(7);
+  const [windowStr, setWindowStr] = useUrlState<"7" | "14" | "30">("window", "7");
+  const windowDays = Number(windowStr) as 7 | 14 | 30;
+  const setWindowDays = (n: number) => setWindowStr(String(n) as "7" | "14" | "30");
   const { data, isLoading, isError, error, refetch } = useQuery<VeoCostResponse>({
     queryKey: ["/api/content-platform/veo-cost", windowDays],
     queryFn: async () => {
