@@ -4,6 +4,7 @@ import { Menu } from "lucide-react";
 import { LastUpdated } from "./LastUpdated";
 import { RefreshAll } from "./RefreshAll";
 import { PollingControl } from "./PollingControl";
+import { CommandPalette } from "./CommandPalette";
 
 export function Layout({
   children,
@@ -22,6 +23,7 @@ export function Layout({
   const [navOpen, setNavOpen] = useState(false);
   return (
     <div className="flex min-h-screen bg-background text-foreground">
+      <CommandPalette />
       <Sidebar mobileOpen={navOpen} onClose={() => setNavOpen(false)} />
       <main className="flex-1 min-w-0">
         <header className="border-b border-border bg-card/30 backdrop-blur sticky top-0 z-20">
