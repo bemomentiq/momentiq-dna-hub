@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
-import { useLocation } from "wouter";
 
 type ThemeOptimalConfig = {
   theme: string;
@@ -40,8 +39,6 @@ export default function Themes() {
   const { data, isLoading } = useQuery<ThemesResponse>({
     queryKey: ["/api/content-platform/themes"],
   });
-  const [, navigate] = useLocation();
-
   const themes = data?.themes ?? [];
   const dnaConfigured = data?.dna_configured ?? false;
 
@@ -80,12 +77,10 @@ export default function Themes() {
                 </tr>
               )}
               {themes.map((t) => {
-                const slug = encodeURIComponent(t.theme);
                 return (
                   <tr
                     key={t.theme}
-                    onClick={() => navigate(`/themes/${slug}`)}
-                    className="border-t border-card-border hover:bg-accent/30 cursor-pointer"
+                    className="border-t border-card-border hover:bg-accent/30"
                     data-testid={`row-theme-${t.theme}`}
                   >
                     <td className="px-4 py-2.5 font-medium">{t.theme}</td>
