@@ -46,6 +46,44 @@ export type JobStatus = {
   last_error: string | null;
 };
 
+export type GenerationFailure = {
+  pipeline: string;
+  category: string;
+  error_signature: string;
+  count_24h: number;
+  count_7d: number;
+  last_seen_at: string;
+};
+
+export type ErrorSignature = {
+  signature: string;
+  count_24h: number;
+  count_7d: number;
+  trend_pct: number | null;
+  sample_message: string;
+};
+
+export type JobQueueHealth = {
+  pending: number;
+  processing: number;
+  p50_latency_ms: number | null;
+  p95_latency_ms: number | null;
+  stalled_count: number;
+  computed_at: string;
+};
+
+export type PipelineFunnelStep = {
+  stage: "submitted" | "started" | "succeeded" | "high_quality";
+  count: number;
+};
+
+export type PipelineFunnel = {
+  pipeline: string;
+  category: string;
+  steps: PipelineFunnelStep[];
+  window_days: number;
+};
+
 export function scriptsageConfigured(): boolean {
   return getBase().length > 0;
 }
@@ -71,4 +109,22 @@ export const scriptsageClient = {
   subscriptions: () =>
     cached("ss:subs", 60_000, () => ssGet<SubscriptionStats>("/api/admin/subscriptions")),
   jobs: () => cached("ss:jobs", 30_000, () => ssGet<{ jobs: JobStatus[] }>("/api/admin/jobs")),
+  failures: () =>
+    cached("ss:failures", 30_000, () =>
+      ssGet<{ failures: GenerationFailure[] }>("/api/admin/monitoring/generation-failures"),
+    ),
+  errors: (windowDays: number = 7) =>
+    cached(`ss:errors:${windowDays}`, 30_000, () =>
+      ssGet<{ signatures: ErrorSignature[] }>(
+        `/api/admin/errors/signatures?window_days=${windowDays}`,
+      ),
+    ),
+  queueHealth: () =>
+    cached("ss:queue", 30_000, () => ssGet<JobQueueHealth>("/api/admin/monitoring/queue")),
+  funnels: (windowDays: number = 7) =>
+    cached(`ss:funnels:${windowDays}`, 30_000, () =>
+      ssGet<{ funnels: PipelineFunnel[] }>(
+        `/api/admin/monitoring/funnel?window_days=${windowDays}`,
+      ),
+    ),
 };
