@@ -21,6 +21,7 @@ import Autonomy from "@/pages/Autonomy";
 import Themes from "@/pages/Themes";
 import Scoring from "@/pages/Scoring";
 import ThemeDetail from "@/pages/ThemeDetail";
+import DataTableDemo from "@/pages/dev/DataTableDemo";
 
 function AppRouter() {
   return (
@@ -49,6 +50,8 @@ function AppRouter() {
       <Route path="/evals"><Redirect to="/ab-runs" /></Route>
       <Route path="/hitl"><Redirect to="/scoring" /></Route>
       <Route path="/money-path"><Redirect to="/veo-cost" /></Route>
+      {/* Hidden dev routes (not in sidebar). */}
+      <Route path="/_dev/datatable" component={DataTableDemo} />
       <Route component={NotFound} />
     </Switch>
   );
