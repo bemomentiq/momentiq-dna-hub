@@ -13,11 +13,15 @@ const items = [
   { href: "/fleet", label: "Fleet Runs", icon: Cpu, group: "agent" },
   { href: "/actions", label: "All Actions", icon: Grid3x3 },
   { href: "/roadmap", label: "Roadmap", icon: Map },
-  { href: "/training", label: "Training Data", icon: Database },
+  { href: "/scriptsage", label: "ScriptSage", icon: Workflow },
   { href: "/pipeline", label: "Data Pipeline", icon: Workflow },
+  { href: "/ab-runs", label: "A/B Runs", icon: Activity },
+  { href: "/training", label: "Training Data", icon: Database },
+  { href: "/subscriptions", label: "Subscriptions", icon: DollarSign },
   { href: "/evals", label: "Evals", icon: Activity },
   { href: "/scoring", label: "IDS Scoring", icon: Activity },
-  { href: "/money-path", label: "Money Path", icon: DollarSign },
+  { href: "/hitl", label: "HITL Burden", icon: Hourglass },
+  { href: "/veo-cost", label: "Veo Cost & ROI", icon: DollarSign },
   { href: "/issues", label: "GitHub Issues", icon: GitPullRequest },
 ];
 
