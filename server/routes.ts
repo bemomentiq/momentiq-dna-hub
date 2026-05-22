@@ -192,6 +192,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   //   /api/content-platform/overview (corpus / A/B / IDS / Veo / ScriptSage)
   //   /api/content-platform/promotion-candidates
 
+  // SID-era endpoints removed during content-platform redesign:
+  // /api/actions, /api/actions/:name, /api/rollups, /api/hitl-burden,
+  // /api/feed, /api/money-path, /api/data-pipeline.
+  // Replacements live under /api/content-platform/* (themes, ab-runs,
+  // ids-distribution, veo-cost, scriptsage, subscriptions, roadmap).
+
+  // /api/roadmap (hardcoded A–G phases) and /api/exec-brief.md (SID rollups)
+  // removed during content-platform redesign. New equivalents:
+  //   /api/content-platform/roadmap  (live GitHub milestones across 4 repos)
+  //   /api/content-platform/overview (corpus / A/B / IDS / Veo / ScriptSage)
+  //   /api/content-platform/promotion-candidates
+
   // ============ Autonomy status ============
   // Snapshot of the always-on engine: resume flags, concurrency caps, in-flight counts.
   app.get("/api/autonomy/status", (_req, res) => {
