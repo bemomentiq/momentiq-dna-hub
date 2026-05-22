@@ -373,6 +373,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
   });
 
+  // Per-theme drill-down: champion config + variants (A/B runs).
+  // Returns { dna_configured, theme, variants } so the client can render an
+  // empty-state when DNA_API_BASE is unset, instead of 502'ing.
+  app.get("/api/content-platform/themes/:slug", async (req, res) => {
+    const data = await dnaClient.theme(req.params.slug);
+    res.json({
+      dna_configured: dnaClient.configured(),
+      slug: req.params.slug,
+      theme: data?.theme ?? null,
+      variants: data?.variants ?? null,
+      fetched_at: new Date().toISOString(),
+    });
+  });
+
   // Reachability probes for upstream content-platform services. Bypasses the
   // read cache — sidebar pill / monitors should see live status.
   app.get("/api/content-platform/health", async (_req, res) => {
@@ -401,6 +415,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const n = cacheBust(prefix);
     res.json({ busted: n, prefix: prefix ?? "(all)" });
   });
+
+  // SID-era endpoints removed during content-platform redesign:
+  // /api/actions, /api/actions/:name, /api/rollups, /api/hitl-burden,
+  // /api/feed, /api/money-path, /api/data-pipeline.
+  // Replacements live under /api/content-platform/* (themes, ab-runs,
+  // ids-distribution, veo-cost, scriptsage, subscriptions, roadmap).
+
+  // /api/roadmap (hardcoded A–G phases) and /api/exec-brief.md (SID rollups)
+  // removed during content-platform redesign. New equivalents:
+  //   /api/content-platform/roadmap  (live GitHub milestones across 4 repos)
+  //   /api/content-platform/overview (corpus / A/B / IDS / Veo / ScriptSage)
+  //   /api/content-platform/promotion-candidates
 
   // SID-era endpoints removed during content-platform redesign:
   // /api/actions, /api/actions/:name, /api/rollups, /api/hitl-burden,

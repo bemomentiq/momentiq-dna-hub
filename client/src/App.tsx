@@ -23,6 +23,7 @@ import Run from "@/pages/Run";
 import Fleet from "@/pages/Fleet";
 import Autonomy from "@/pages/Autonomy";
 import Themes from "@/pages/Themes";
+import ThemeDetail from "@/pages/ThemeDetail";
 
 function AppRouter() {
   return (
@@ -37,6 +38,7 @@ function AppRouter() {
       <Route path="/themes" component={Themes} />
       <Route path="/actions" component={AllActions} />
       <Route path="/actions/:name" component={ActionDetail} />
+      <Route path="/themes/:slug" component={ThemeDetail} />
       <Route path="/roadmap" component={Roadmap} />
       <Route path="/training" component={TrainingWorkbench} />
       <Route path="/pipeline" component={DataPipeline} />
