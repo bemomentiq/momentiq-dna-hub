@@ -358,6 +358,51 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
   });
 
+  // Veo cost & ROI by theme — proxies dnaClient.veoCost. Returns
+  // { dna_configured, summary, total_cost_usd, window_days }. When dna is not
+  // configured (DNA_API_BASE unset) the upstream returns null and we surface
+  // an empty payload so the page can render its empty-state.
+  app.get("/api/content-platform/veo-cost", async (req, res) => {
+    const raw = parseInt(String(req.query.window_days ?? "7"), 10);
+    const windowDays = [7, 14, 30].includes(raw) ? raw : 7;
+    const configured = dnaClient.configured();
+    const upstream = await dnaClient.veoCost(windowDays);
+    // When DNA is configured but veoCost returns null, that's an upstream
+    // failure (network/5xx) — surface it as 502 with upstream_error so the
+    // client can render a distinct error state instead of collapsing to
+    // "no Veo calls". Bugbot flagged this on PR #19.
+    if (configured && upstream === null) {
+      return void res.status(502).json({
+        dna_configured: true,
+        upstream_error: true,
+        summary: [],
+        total_cost_usd: 0,
+        window_days: windowDays,
+      });
+    }
+    res.json({
+      dna_configured: configured,
+      upstream_error: false,
+      summary: upstream?.summary ?? [],
+      total_cost_usd: upstream?.total_cost_usd ?? 0,
+      window_days: upstream?.window_days ?? windowDays,
+    });
+  });
+
+  // Per-theme drill-down: champion config + variants (A/B runs).
+  // Returns { dna_configured, theme, variants } so the client can render an
+  // empty-state when DNA_API_BASE is unset, instead of 502'ing.
+  app.get("/api/content-platform/themes/:slug", async (req, res) => {
+    const data = await dnaClient.theme(req.params.slug);
+    res.json({
+      dna_configured: dnaClient.configured(),
+      slug: req.params.slug,
+      theme: data?.theme ?? null,
+      variants: data?.variants ?? null,
+      fetched_at: new Date().toISOString(),
+    });
+  });
+
   // Reachability probes for upstream content-platform services. Bypasses the
   // read cache — sidebar pill / monitors should see live status.
   app.get("/api/content-platform/health", async (_req, res) => {
@@ -386,6 +431,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const n = cacheBust(prefix);
     res.json({ busted: n, prefix: prefix ?? "(all)" });
   });
+
+  // SID-era endpoints removed during content-platform redesign:
+  // /api/actions, /api/actions/:name, /api/rollups, /api/hitl-burden,
+  // /api/feed, /api/money-path, /api/data-pipeline.
+  // Replacements live under /api/content-platform/* (themes, ab-runs,
+  // ids-distribution, veo-cost, scriptsage, subscriptions, roadmap).
+
+  // /api/roadmap (hardcoded A–G phases) and /api/exec-brief.md (SID rollups)
+  // removed during content-platform redesign. New equivalents:
+  //   /api/content-platform/roadmap  (live GitHub milestones across 4 repos)
+  //   /api/content-platform/overview (corpus / A/B / IDS / Veo / ScriptSage)
+  //   /api/content-platform/promotion-candidates
 
   // SID-era endpoints removed during content-platform redesign:
   // /api/actions, /api/actions/:name, /api/rollups, /api/hitl-burden,
