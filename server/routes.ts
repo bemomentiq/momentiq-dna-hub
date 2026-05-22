@@ -415,6 +415,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
   });
 
+  // A/B runs proxy: forwards optional status / limit filters to dnaClient and
+  // returns null payload when DNA_API_BASE is unset so the UI can render an
+  // empty-state instead of erroring.
+  app.get("/api/content-platform/ab-runs", async (req, res) => {
+    const status = typeof req.query.status === "string" ? req.query.status : undefined;
+    const limit = typeof req.query.limit === "string" ? Number(req.query.limit) : undefined;
+    const data = await dnaClient.abRuns({
+      status,
+      limit: Number.isFinite(limit) ? limit : undefined,
+    });
+    res.json({
+      dna_configured: dnaClient.configured(),
+      runs: data?.runs ?? null,
+      fetched_at: new Date().toISOString(),
+    });
+  });
+
   // Reachability probes for upstream content-platform services. Bypasses the
   // read cache — sidebar pill / monitors should see live status.
   app.get("/api/content-platform/health", async (_req, res) => {
