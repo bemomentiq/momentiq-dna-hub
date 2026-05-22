@@ -1,28 +1,23 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Grid3x3, Map, Database, GitPullRequest, Activity, DollarSign, Workflow, ClipboardCheck, Hourglass, Brain, Rocket, Send, Cpu, X, Gauge } from "lucide-react";
+import { LayoutDashboard, Grid3x3, Map, GitPullRequest, Activity, DollarSign, Workflow, ClipboardCheck, Brain, Rocket, Send, Cpu, X, Gauge } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
   { href: "/exec", label: "Executive Brief", icon: ClipboardCheck },
   { href: "/themes", label: "Themes", icon: Grid3x3 },
+  { href: "/ab-runs", label: "A/B Runs", icon: Activity },
+  { href: "/scoring", label: "IDS Scoring", icon: Activity },
+  { href: "/scriptsage", label: "ScriptSage", icon: Workflow },
+  { href: "/veo-cost", label: "Veo Cost & ROI", icon: DollarSign },
+  { href: "/subscriptions", label: "Subscriptions", icon: DollarSign },
+  { href: "/roadmap", label: "Roadmap", icon: Map },
+  { href: "/issues", label: "GitHub Issues", icon: GitPullRequest },
   { href: "/autonomy", label: "Autonomy", icon: Gauge },
   { href: "/explorer", label: "Explorer", icon: Brain, group: "agent" },
   { href: "/backlog", label: "Agent Backlog", icon: Rocket, group: "agent" },
   { href: "/run", label: "Run on Fleet", icon: Send, group: "agent" },
   { href: "/fleet", label: "Fleet Runs", icon: Cpu, group: "agent" },
-  { href: "/actions", label: "All Actions", icon: Grid3x3 },
-  { href: "/roadmap", label: "Roadmap", icon: Map },
-  { href: "/scriptsage", label: "ScriptSage", icon: Workflow },
-  { href: "/pipeline", label: "Data Pipeline", icon: Workflow },
-  { href: "/ab-runs", label: "A/B Runs", icon: Activity },
-  { href: "/training", label: "Training Data", icon: Database },
-  { href: "/subscriptions", label: "Subscriptions", icon: DollarSign },
-  { href: "/evals", label: "Evals", icon: Activity },
-  { href: "/scoring", label: "IDS Scoring", icon: Activity },
-  { href: "/hitl", label: "HITL Burden", icon: Hourglass },
-  { href: "/veo-cost", label: "Veo Cost & ROI", icon: DollarSign },
-  { href: "/issues", label: "GitHub Issues", icon: GitPullRequest },
 ];
 
 // Sidebar renders as a permanent rail on lg+ and as a slide-in drawer on smaller
@@ -98,8 +93,8 @@ export function Sidebar({ mobileOpen = false, onClose }: { mobileOpen?: boolean;
           })}
         </nav>
         <div className="px-4 py-3 border-t border-sidebar-border text-[11px] text-muted-foreground">
-          <div>Snapshot: 2026-04-29</div>
-          <div className="mt-1">SID main · R195</div>
+          <div>content.bemomentiq.com</div>
+          <div className="mt-1">dna · ScriptSage · Veo</div>
         </div>
       </aside>
     </>
