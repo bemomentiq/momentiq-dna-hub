@@ -10,6 +10,7 @@ import AllActions from "@/pages/AllActions";
 import ActionDetail from "@/pages/ActionDetail";
 import Roadmap from "@/pages/Roadmap";
 import TrainingWorkbench from "@/pages/TrainingWorkbench";
+import ScriptSage from "@/pages/ScriptSage";
 import Evals from "@/pages/Evals";
 import Issues from "@/pages/Issues";
 import ExecutiveBrief from "@/pages/ExecutiveBrief";
@@ -41,6 +42,7 @@ function AppRouter() {
       <Route path="/themes/:slug" component={ThemeDetail} />
       <Route path="/roadmap" component={Roadmap} />
       <Route path="/training" component={TrainingWorkbench} />
+      <Route path="/scriptsage" component={ScriptSage} />
       <Route path="/pipeline" component={DataPipeline} />
       <Route path="/evals" component={Evals} />
       <Route path="/hitl" component={HitlBurden} />

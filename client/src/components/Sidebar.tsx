@@ -13,7 +13,7 @@ const items = [
   { href: "/fleet", label: "Fleet Runs", icon: Cpu, group: "agent" },
   { href: "/actions", label: "All Actions", icon: Grid3x3 },
   { href: "/roadmap", label: "Roadmap", icon: Map },
-  { href: "/training", label: "Training Data", icon: Database },
+  { href: "/scriptsage", label: "ScriptSage", icon: Workflow },
   { href: "/pipeline", label: "Data Pipeline", icon: Workflow },
   { href: "/evals", label: "Evals", icon: Activity },
   { href: "/hitl", label: "HITL Burden", icon: Hourglass },
