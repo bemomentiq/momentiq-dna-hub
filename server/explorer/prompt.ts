@@ -1,10 +1,12 @@
 import { storage } from "../storage";
-import { ACTIONS } from "@shared/actions-seed";
-import { getExtras } from "@shared/action-extras";
-import { LIVE_FEED, OPEN_BLOCKERS } from "@shared/live-feed";
 import { buildFluidLoopContext } from "./fluid-loop";
 import { fetchLiveSignals } from "./neon-signals";
 import { fetchKalodataSignals, getLatestReadinessContext, getLatestRoadmapContext } from "./kalodata-signals";
+
+// SID 40-action snapshot + LIVE_FEED removed during the content-platform redesign.
+// The Explorer now sources live context from /api/content-platform/* endpoints
+// (themes, A/B runs, IDS distribution, Veo cost, ScriptSage stats) at runtime,
+// not from a hardcoded seed.
 
 const ROLE = `You are the **momentiq-dna Roadmap Explorer** — a self-learning agent with compounding memory across runs (up to 15 prior run summaries; oldest are auto-compacted into the ledger).
 
@@ -109,11 +111,10 @@ export async function buildExplorerPrompt(run_id: number): Promise<string> {
   if (cfg.google_drive_oauth) dataSources.push("Google Drive (oauth set; available via Hub config)");
   else dataSources.push("Google Drive (NOT set — propose DATA-DRIVE when a folder has briefs/contracts/specs)");
 
-  // Current platform snapshot
-  const actionsSummary = ACTIONS.map((a) => {
-    const x = getExtras(a.action_name);
-    return `- ${a.action_name} (${a.class}#${a.action_number}) — prod:${a.prod_readiness_pct}% train:${a.training_backfill_pct}% eval:${a.eval_pass_pct ?? "-"}% gate:${a.hitl_gate} money_path:${x.money_path}`;
-  }).join("\n");
+  // Current platform snapshot — sourced live from content-platform endpoints
+  // rather than a hardcoded SID action seed. Explorer prompt should fetch
+  // /api/content-platform/overview at runtime if it needs current KPIs.
+  const actionsSummary = "(SID 40-action snapshot removed; use /api/content-platform/* for live state)";
 
   // Latest completed explorer run with a real next_pickup is the chain handoff
   const latestPickup = priors.find((p) => (p as any).next_pickup && !(p as any).next_pickup.startsWith("[compacted]"))?.next_pickup as string | null | undefined ?? null;
@@ -131,8 +132,8 @@ export async function buildExplorerPrompt(run_id: number): Promise<string> {
     latestPickup,
   });
   const openFindingsSection = openFindings.length ? openFindings.slice(0, 15).map((f) => `- #${f.id} [${f.severity}/${f.category}] ${f.title} → ${f.action_name || f.phase_id || "-"}`).join("\n") : "(no open findings)";
-  const recentShips = LIVE_FEED.slice(0, 6).map((f) => `- ${f.date} #${f.number} ${f.title}`).join("\n");
-  const blockers = OPEN_BLOCKERS.map((b) => `- #${b.number} ${b.title}`).join("\n");
+  const recentShips = "(static LIVE_FEED removed; explorer can fetch /api/gh-issues for live recent merges)";
+  const blockers = "(static OPEN_BLOCKERS removed; explorer can fetch /api/gh-issues?labels=blocker&state=open)";
 
   // Live Neon production signals (cached 10 min; graceful fallback when env var missing)
   const signalsResult = await fetchLiveSignals();
@@ -213,7 +214,7 @@ export async function buildExplorerPrompt(run_id: number): Promise<string> {
     cfg.focus_mission ? `# ACTIVE FOCUS MISSION (overrides default exploration when set)` : "",
     cfg.focus_mission ? cfg.focus_mission : "",
     "",
-    `# 40-ACTION SNAPSHOT (from actions-seed.ts as of 2026-04-29)`,
+    `# CONTENT-PLATFORM SNAPSHOT (live; see /api/content-platform/* for current state)`,
     actionsSummary,
     "",
     `# RECENT GITHUB SHIPS (autonomy-related)`,
