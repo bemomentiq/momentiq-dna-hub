@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import { Skeleton, EmptyState, ErrorState } from "@/components/states";
+import { DataTable, type Column } from "@/components/data-table";
 
 type ThemeOptimalConfig = {
   theme: string;
@@ -36,6 +37,59 @@ function fmtDate(s: string | null): string {
   }
 }
 
+const columns: Column<ThemeOptimalConfig>[] = [
+  {
+    key: "theme",
+    header: "Theme",
+    accessor: (t) => t.theme,
+    render: (t) => <span className="font-medium">{t.theme}</span>,
+  },
+  {
+    key: "champion_config_id",
+    header: "Champion config id",
+    accessor: (t) => t.champion_config_id,
+    render: (t) => (
+      <span className="font-mono text-xs text-muted-foreground">{t.champion_config_id ?? "—"}</span>
+    ),
+  },
+  {
+    key: "ids_median",
+    header: "IDS median",
+    accessor: (t) => t.ids_median,
+    align: "right",
+    render: (t) => <span className="tabular-nums">{fmtNum(t.ids_median)}</span>,
+  },
+  {
+    key: "delta_vs_control",
+    header: "Δ vs control",
+    accessor: (t) => t.delta_vs_control,
+    align: "right",
+    render: (t) => <span className="tabular-nums">{fmtDelta(t.delta_vs_control)}</span>,
+  },
+  {
+    key: "promoted_at",
+    header: "Promoted at",
+    accessor: (t) => t.promoted_at,
+    render: (t) => <span className="text-xs text-muted-foreground">{fmtDate(t.promoted_at)}</span>,
+  },
+  {
+    key: "thompson",
+    header: "Thompson α/β",
+    accessor: (t) =>
+      t.thompson_alpha === null || t.thompson_beta === null
+        ? null
+        : t.thompson_alpha + t.thompson_beta,
+    align: "right",
+    render: (t) => (
+      <span className="tabular-nums font-mono text-xs">
+        {t.thompson_alpha === null || t.thompson_beta === null
+          ? "—"
+          : `${t.thompson_alpha.toFixed(1)} / ${t.thompson_beta.toFixed(1)}`}
+      </span>
+    ),
+  },
+];
+
 export default function Themes() {
   const { data, isLoading, isError, error, refetch } = useQuery<ThemesResponse>({
     queryKey: ["/api/content-platform/themes"],
@@ -66,57 +120,15 @@ export default function Themes() {
           }
         />
       ) : (
-        <div className="rounded-lg border border-card-border bg-card overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/30 text-xs uppercase tracking-wide text-muted-foreground">
-              <tr>
-                <th className="text-left px-4 py-2.5 font-medium">Theme</th>
-                <th className="text-left px-4 py-2.5 font-medium">Champion config id</th>
-                <th className="text-right px-4 py-2.5 font-medium">IDS median</th>
-                <th className="text-right px-4 py-2.5 font-medium">Δ vs control</th>
-                <th className="text-left px-4 py-2.5 font-medium">Promoted at</th>
-                <th className="text-right px-4 py-2.5 font-medium">Thompson α/β</th>
-              </tr>
-            </thead>
-            <tbody>
-              {themes.length === 0 && !isLoading && (
-                <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
-                    No themes available
-                  </td>
-                </tr>
-              )}
-              {themes.map((t) => {
-                return (
-                  <tr
-                    key={t.theme}
-                    className="border-t border-card-border hover:bg-accent/30"
-                    data-testid={`row-theme-${t.theme}`}
-                  >
-                    <td className="px-4 py-2.5 font-medium">{t.theme}</td>
-                    <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">
-                      {t.champion_config_id ?? "—"}
-                    </td>
-                    <td className="px-4 py-2.5 text-right tabular-nums">
-                      {fmtNum(t.ids_median)}
-                    </td>
-                    <td className="px-4 py-2.5 text-right tabular-nums">
-                      {fmtDelta(t.delta_vs_control)}
-                    </td>
-                    <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                      {fmtDate(t.promoted_at)}
-                    </td>
-                    <td className="px-4 py-2.5 text-right tabular-nums font-mono text-xs">
-                      {t.thompson_alpha === null || t.thompson_beta === null
-                        ? "—"
-                        : `${t.thompson_alpha.toFixed(1)} / ${t.thompson_beta.toFixed(1)}`}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          rows={themes}
+          columns={columns}
+          rowKey={(t) => t.theme}
+          rowHref={(t) => `/themes/${t.theme}`}
+          defaultSort={{ key: "ids_median", dir: "desc" }}
+          csvFilename="themes"
+          emptyMessage="No themes available"
+        />
       )}
     </Layout>
   );
