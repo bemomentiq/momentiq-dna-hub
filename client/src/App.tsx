@@ -18,6 +18,7 @@ import MoneyPath from "@/pages/MoneyPath";
 import VeoCost from "@/pages/VeoCost";
 import HitlBurden from "@/pages/HitlBurden";
 import DataPipeline from "@/pages/DataPipeline";
+import Subscriptions from "@/pages/Subscriptions";
 import Explorer from "@/pages/Explorer";
 import Backlog from "@/pages/Backlog";
 import Run from "@/pages/Run";
@@ -44,6 +45,7 @@ function AppRouter() {
       <Route path="/training" component={TrainingWorkbench} />
       <Route path="/scriptsage" component={ScriptSage} />
       <Route path="/pipeline" component={DataPipeline} />
+      <Route path="/subscriptions" component={Subscriptions} />
       <Route path="/evals" component={Evals} />
       <Route path="/hitl" component={HitlBurden} />
       <Route path="/money-path" component={MoneyPath} />

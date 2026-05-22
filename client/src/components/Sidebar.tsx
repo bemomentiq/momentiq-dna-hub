@@ -15,6 +15,8 @@ const items = [
   { href: "/roadmap", label: "Roadmap", icon: Map },
   { href: "/scriptsage", label: "ScriptSage", icon: Workflow },
   { href: "/pipeline", label: "Data Pipeline", icon: Workflow },
+  { href: "/training", label: "Training Data", icon: Database },
+  { href: "/subscriptions", label: "Subscriptions", icon: DollarSign },
   { href: "/evals", label: "Evals", icon: Activity },
   { href: "/hitl", label: "HITL Burden", icon: Hourglass },
   { href: "/veo-cost", label: "Veo Cost & ROI", icon: DollarSign },

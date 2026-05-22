@@ -403,6 +403,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
   });
 
+  // Subscriptions & credit burn — proxies ScriptSage. Returns empty payload
+  // (subscriptions: null) when the upstream is unconfigured so the page renders
+  // a graceful empty state.
+  app.get("/api/content-platform/subscriptions", async (_req, res) => {
+    const subs = await scriptsageClient.subscriptions();
+    res.json({
+      scriptsage_configured: scriptsageClient.configured(),
+      subscriptions: subs,
+      fetched_at: new Date().toISOString(),
+    });
+  });
+
   // Reachability probes for upstream content-platform services. Bypasses the
   // read cache — sidebar pill / monitors should see live status.
   app.get("/api/content-platform/health", async (_req, res) => {
