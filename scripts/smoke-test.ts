@@ -70,6 +70,26 @@ const checks: Check[] = [
     expectStatus: [200, 404, 502],
   },
   {
+    name: "content-platform/scriptsage/failures",
+    path: "/api/content-platform/scriptsage/failures",
+    expectStatus: [200, 404, 502],
+  },
+  {
+    name: "content-platform/scriptsage/errors",
+    path: "/api/content-platform/scriptsage/errors?window_days=7",
+    expectStatus: [200, 404, 502],
+  },
+  {
+    name: "content-platform/scriptsage/queue-health",
+    path: "/api/content-platform/scriptsage/queue-health",
+    expectStatus: [200, 404, 502],
+  },
+  {
+    name: "content-platform/scriptsage/funnel",
+    path: "/api/content-platform/scriptsage/funnel?window_days=7",
+    expectStatus: [200, 404, 502],
+  },
+  {
     name: "content-platform/bandit/state",
     path: "/api/content-platform/bandit/state",
     expectStatus: [200, 404, 502],
