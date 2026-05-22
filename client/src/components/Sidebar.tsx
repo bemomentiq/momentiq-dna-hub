@@ -54,8 +54,8 @@ export function Sidebar({ mobileOpen = false, onClose }: { mobileOpen?: boolean;
               <rect x="13" y="13" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
             </svg>
             <div>
-              <div className="font-semibold text-sm leading-tight">Autonomy Hub</div>
-              <div className="text-[11px] text-muted-foreground">SID 40-action tracker</div>
+              <div className="font-semibold text-sm leading-tight">Content Platform Hub</div>
+              <div className="text-[11px] text-muted-foreground">momentiq-dna · ScriptSage · Veo</div>
             </div>
           </div>
           {/* Mobile-only close button */}
