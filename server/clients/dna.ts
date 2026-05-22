@@ -2,8 +2,27 @@
 // Base URL is read from DNA_API_BASE; when unset, helpers return null so callers
 // can render empty-states instead of crashing in environments without access.
 
-const BASE = process.env.DNA_API_BASE || "";
-const TOKEN = process.env.DNA_API_TOKEN || "";
+import { cached } from "./cache";
+import { storage } from "../storage";
+
+// Resolve base + token at request time, env first then cron_config DB row.
+// This lets operators edit URLs from the autonomy page without redeploys.
+function getBase(): string {
+  if (process.env.DNA_API_BASE) return process.env.DNA_API_BASE;
+  try {
+    return (storage.getCronConfigSafe() as any)?.dna_api_base || "";
+  } catch {
+    return "";
+  }
+}
+function getToken(): string {
+  if (process.env.DNA_API_TOKEN) return process.env.DNA_API_TOKEN;
+  try {
+    return (storage.getCronConfigSafe() as any)?.dna_api_token || "";
+  } catch {
+    return "";
+  }
+}
 
 export type ThemeOptimalConfig = {
   theme: string;
@@ -53,15 +72,17 @@ export type CorpusStats = {
 };
 
 export function dnaConfigured(): boolean {
-  return BASE.length > 0;
+  return getBase().length > 0;
 }
 
 async function dnaGet<T>(path: string): Promise<T | null> {
-  if (!BASE) return null;
+  const base = getBase();
+  if (!base) return null;
+  const token = getToken();
   const headers: Record<string, string> = { Accept: "application/json" };
-  if (TOKEN) headers.Authorization = `Bearer ${TOKEN}`;
+  if (token) headers.Authorization = `Bearer ${token}`;
   try {
-    const r = await fetch(`${BASE.replace(/\/$/, "")}${path}`, { headers });
+    const r = await fetch(`${base.replace(/\/$/, "")}${path}`, { headers });
     if (!r.ok) return null;
     return (await r.json()) as T;
   } catch {
@@ -69,24 +90,40 @@ async function dnaGet<T>(path: string): Promise<T | null> {
   }
 }
 
+// All read helpers go through a 30–60s TTL cache so the hub doesn't hammer
+// momentiq-dna on every page render. Mutations should bust cache via cacheBust.
 export const dnaClient = {
   configured: dnaConfigured,
-  themes: () => dnaGet<{ themes: ThemeOptimalConfig[] }>("/api/dna/themes"),
+  themes: () =>
+    cached("dna:themes", 60_000, () =>
+      dnaGet<{ themes: ThemeOptimalConfig[] }>("/api/dna/themes"),
+    ),
   theme: (slug: string) =>
-    dnaGet<{ theme: ThemeOptimalConfig; variants: AbRun[] }>(`/api/dna/themes/${encodeURIComponent(slug)}`),
+    cached(`dna:theme:${slug}`, 60_000, () =>
+      dnaGet<{ theme: ThemeOptimalConfig; variants: AbRun[] }>(
+        `/api/dna/themes/${encodeURIComponent(slug)}`,
+      ),
+    ),
   abRuns: (opts: { status?: string; limit?: number } = {}) => {
     const q = new URLSearchParams();
     if (opts.status) q.set("status", opts.status);
     if (opts.limit) q.set("limit", String(opts.limit));
-    return dnaGet<{ runs: AbRun[] }>(`/api/dna/ab-runs?${q}`);
+    return cached(`dna:abRuns:${q}`, 30_000, () =>
+      dnaGet<{ runs: AbRun[] }>(`/api/dna/ab-runs?${q}`),
+    );
   },
   veoCost: (windowDays: number = 7) =>
-    dnaGet<{ summary: VeoCallSummary[]; total_cost_usd: number; window_days: number }>(
-      `/api/dna/veo-cost?window_days=${windowDays}`
+    cached(`dna:veoCost:${windowDays}`, 30_000, () =>
+      dnaGet<{ summary: VeoCallSummary[]; total_cost_usd: number; window_days: number }>(
+        `/api/dna/veo-cost?window_days=${windowDays}`,
+      ),
     ),
   idsDistribution: (windowDays: number = 7) =>
-    dnaGet<{ distributions: IdsDistribution[]; window_days: number }>(
-      `/api/dna/ids-distribution?window_days=${windowDays}`
+    cached(`dna:ids:${windowDays}`, 30_000, () =>
+      dnaGet<{ distributions: IdsDistribution[]; window_days: number }>(
+        `/api/dna/ids-distribution?window_days=${windowDays}`,
+      ),
     ),
-  corpus: () => dnaGet<CorpusStats>("/api/dna/corpus-stats"),
+  corpus: () =>
+    cached("dna:corpus", 60_000, () => dnaGet<CorpusStats>("/api/dna/corpus-stats")),
 };

@@ -1,9 +1,6 @@
 import type { Express } from "express";
 import { createServer } from "node:http";
 import type { Server } from "node:http";
-import { ACTIONS, rollups } from "@shared/actions-seed";
-import { getExtras, hitlHoursPerWeek } from "@shared/action-extras";
-import { LIVE_FEED, OPEN_BLOCKERS } from "@shared/live-feed";
 import { registerExplorerRoutes } from "./explorer/routes";
 import { registerFleetRoutes } from "./explorer/fleet-routes";
 import { registerDispatchRoutes } from "./explorer/dispatch-log";
@@ -19,6 +16,8 @@ import { storage } from "./storage";
 import { buildDigestMarkdown } from "./digest";
 import { dnaClient } from "./clients/dna";
 import { scriptsageClient } from "./clients/scriptsage";
+import { checkDnaHealth, checkScriptsageHealth, checkKalodataHealth } from "./clients/health";
+import { cacheStats, cacheBust } from "./clients/cache";
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   registerExplorerRoutes(app);
@@ -144,149 +143,46 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
   });
 
-  app.get("/api/actions", (_req, res) => {
-    res.json(ACTIONS.map((a) => ({ ...a, extras: getExtras(a.action_name) })));
+  // Reachability probes for upstream content-platform services. Bypasses the
+  // read cache — sidebar pill / monitors should see live status.
+  app.get("/api/content-platform/health", async (_req, res) => {
+    const cfg = storage.getCronConfig() as any;
+    const companionUrl = cfg.companion_site_url || process.env.KALODATA_API_URL || "";
+    const [dna, ss, kalo] = await Promise.all([
+      checkDnaHealth(),
+      checkScriptsageHealth(),
+      companionUrl ? checkKalodataHealth(companionUrl) : Promise.resolve({
+        configured: false,
+        reachable: null,
+        latency_ms: null,
+        checked_at: new Date().toISOString(),
+        error: null,
+      }),
+    ]);
+    res.json({ dna, scriptsage: ss, kalodata: kalo, fetched_at: new Date().toISOString() });
   });
 
-  app.get("/api/actions/:name", (req, res) => {
-    const action = ACTIONS.find((a) => a.action_name === req.params.name);
-    if (!action) return void res.status(404).json({ error: "not found" });
-    res.json({ ...action, extras: getExtras(action.action_name) });
+  // Cache introspection + bust (ops-only; useful from the autonomy page).
+  app.get("/api/content-platform/cache", (_req, res) => {
+    res.json(cacheStats());
+  });
+  app.post("/api/content-platform/cache/bust", (req, res) => {
+    const prefix = (req.query.prefix as string) || undefined;
+    const n = cacheBust(prefix);
+    res.json({ busted: n, prefix: prefix ?? "(all)" });
   });
 
-  app.get("/api/rollups", (_req, res) => {
-    const r = rollups(ACTIONS);
-    const hitl = hitlHoursPerWeek();
-    const totalHumanHrs = hitl.reduce((s, x) => s + x.hours_per_week, 0);
-    const promotableHrs = hitl.filter((x) => x.promotable).reduce((s, x) => s + x.hours_per_week, 0);
-    res.json({ ...r, total_human_hours_per_week: totalHumanHrs, promotable_hours_per_week: promotableHrs });
-  });
+  // SID-era endpoints removed during content-platform redesign:
+  // /api/actions, /api/actions/:name, /api/rollups, /api/hitl-burden,
+  // /api/feed, /api/money-path, /api/data-pipeline.
+  // Replacements live under /api/content-platform/* (themes, ab-runs,
+  // ids-distribution, veo-cost, scriptsage, subscriptions, roadmap).
 
-  app.get("/api/hitl-burden", (_req, res) => {
-    res.json(hitlHoursPerWeek());
-  });
-
-  app.get("/api/feed", (_req, res) => {
-    res.json({ recent: LIVE_FEED, blockers: OPEN_BLOCKERS });
-  });
-
-  app.get("/api/money-path", (_req, res) => {
-    const moneyActions = ACTIONS.filter((a) => {
-      const x = getExtras(a.action_name);
-      return x.money_path;
-    }).map((a) => ({ ...a, extras: getExtras(a.action_name) }));
-    res.json(moneyActions);
-  });
-
-  app.get("/api/data-pipeline", (_req, res) => {
-    // Aggregate sources with full chain metadata
-    const sourceMap = new Map<string, { source: string; total_rows: number; actions: { name: string; display_name: string; rows: number; cleaning: string[] }[] }>();
-    ACTIONS.forEach((a) => {
-      a.data_sources.forEach((s) => {
-        if (!sourceMap.has(s.source)) sourceMap.set(s.source, { source: s.source, total_rows: 0, actions: [] });
-        const e = sourceMap.get(s.source)!;
-        e.total_rows += s.estimated_rows;
-        e.actions.push({ name: a.action_name, display_name: a.display_name, rows: s.estimated_rows, cleaning: s.cleaning_steps });
-      });
-    });
-    const sources = Array.from(sourceMap.values()).sort((a, b) => b.total_rows - a.total_rows);
-
-    // Pipeline funnel: source rows → cleaned → fixtures → training rows → eval cases
-    const totalSourceRows = sources.reduce((s, x) => s + x.total_rows, 0);
-    const totalTrainingRows = ACTIONS.reduce((s, a) => s + a.training_rows, 0);
-    const totalFixtures = ACTIONS.reduce((s, a) => s + a.fixture_count, 0);
-    const evalCases = ACTIONS.reduce((s, a) => s + a.eval_corpus_size, 0);
-
-    res.json({
-      sources,
-      funnel: [
-        { stage: "Source rows discovered", value: totalSourceRows },
-        { stage: "Cleaned + labeled (training)", value: totalTrainingRows },
-        { stage: "Backtest fixtures", value: totalFixtures },
-        { stage: "Eval corpus (active)", value: evalCases },
-      ],
-    });
-  });
-
-  app.get("/api/roadmap", (_req, res) => {
-    const phases = [
-      { id: "phase-a", name: "Phase A — Production LLM wire-up", description: "Ship hybrid intent classifier to prod, AnthropicCompletionProvider DI, $50/day budget throttle. From FLEET tracker #3604.", items: [
-        { id: "CLASSIFIER-WIRE-1", title: "Wire hybrid router into detect_and_route_intent", action: "detect_and_route_intent", status: "shipped", issue: 3605 },
-        { id: "CLASSIFIER-WIRE-2", title: "AnthropicCompletionProvider DI + per-shop feature flag", action: "detect_and_route_intent", status: "shipped", issue: 3606 },
-        { id: "CLASSIFIER-WIRE-3", title: "$50/day budget throttle + observation logging", action: "detect_and_route_intent", status: "shipped", issue: 3607 },
-      ]},
-      { id: "phase-b", name: "Phase B — 10 zero-fixture actions", description: "Each action gets ≥100 real backtest fixtures + outcome ladder + learning-engine scoring. All 10 shipped 2026-04-24.", items: [
-        { id: "AUTONOMY-AUTO-APPROVE", action: "auto_approve_or_route_to_hitl", title: "Ship auto_approve_draft with CARE score gate + 100 real fixtures", status: "shipped", issue: 3608 },
-        { id: "AUTONOMY-CLASSIFY-CREATOR", action: "evaluate_creator_eligibility", title: "Augment classify_creator with dormancy archetype + 100 real fixtures", status: "shipped", issue: 3609 },
-        { id: "AUTONOMY-CLASSIFY-BY-GMV", action: "score_and_select_creators", title: "Extract findTierByGmv pure function + register as LIVE action", status: "shipped", issue: 3610 },
-        { id: "AUTONOMY-FIND-TIER-BY-GMV", action: "score_and_select_creators", title: "Implement find_tier_by_gmv handler", status: "shipped", issue: 3611 },
-        { id: "AUTONOMY-CLASSIFY-DORMANCY", action: "evaluate_reactivation_eligibility", title: "Register classifyDormancy as automation action + 100 real fixtures", status: "shipped", issue: 3612 },
-        { id: "AUTONOMY-DETECT-INTENT", action: "detect_and_route_intent", title: "Replace legacy keyword matching with hybrid v5 classifier", status: "shipped", issue: 3613 },
-        { id: "AUTONOMY-DISCOVER-CREATORS", action: "discover_creators", title: "Add outcome ladder + 100 fixtures + learning-engine scoring", status: "shipped", issue: 3614 },
-        { id: "AUTONOMY-EVAL-ESCALATION", action: "escalate_to_manager", title: "Build evaluate_escalation handler with 5-rule composition", status: "shipped", issue: 3615 },
-        { id: "AUTONOMY-EVAL-OFFER", action: "evaluate_offer_request", title: "Expand evaluate_organic_offer to 3-way decision + counter trigger", status: "shipped", issue: 3616 },
-        { id: "AUTONOMY-COUNTER-OFFER", action: "evaluate_counter_offer", title: "Wire generate_counter_response to CARE response generator", status: "shipped", issue: 3617 },
-      ]},
-      { id: "phase-c", name: "Phase C — Outcome-based eval layer", description: "Per-action scorecards, 14-day outcome reward join, eval dashboard.", items: [
-        { id: "EVAL-SCORECARD", title: "Per-action 3-metric scorecard dashboard", status: "shipped", issue: 3793 },
-        { id: "EVAL-APPROVAL-RATE", title: "Join classifier output → AI Training feedback", status: "open" },
-        { id: "EVAL-OUTCOME-REWARD", title: "14-day outcome join via ops_platform_outcomes", status: "open" },
-        { id: "EVAL-DASHBOARD", title: "Per-action scorecard page (this hub)", status: "shipped" },
-      ]},
-      { id: "phase-d", name: "Phase D — Additional data sources", description: "Bring Gmail, Slack, Fireflies, TikTok events into the training corpus.", items: [
-        { id: "DATA-GMAIL", title: "BD thread ingest (~3k threads)", status: "open" },
-        { id: "DATA-SLACK", title: "#miq-ops + 37 brand channels ingest", status: "open" },
-        { id: "DATA-FIREFLIES", title: "Sales + ops call transcript ingest", status: "open" },
-        { id: "DATA-TTS-EVENTS", title: "TikTok Shop order/fulfillment event stream", status: "open" },
-        { id: "DATA-PA-FEED", title: "Restore 6,452 missing PA records (blocks PD9/PD11/PD13)", status: "in_progress", issue: 3474 },
-      ]},
-      { id: "phase-e", name: "Phase E — Drift + auto-retrain", description: "Page-Hinkley drift, weekly retrain cron, ρ<0.80 auto-rollback.", items: [
-        { id: "DRIFT-PAGE-HINKLEY", title: "Wire page-hinkley drift monitor", status: "open", issue: 3363 },
-        { id: "RETRAIN-WEEKLY-CRON", title: "Activate weekly retrain cron", status: "open", issue: 3364 },
-        { id: "AUTO-ROLLBACK", title: "ρ<0.80 → auto-revert trigger", status: "open" },
-      ]},
-      { id: "phase-f", name: "Phase F — HITL gate flips (highest leverage)", description: "Promote tina_review → auto on actions where eval pass ≥ 90% on a 200-case corpus.", items: ACTIONS.filter((a) => a.hitl_gate === "tina_review" && (a.eval_pass_pct ?? 0) >= 90).map((a) => ({ id: `FLIP-${a.action_name.toUpperCase()}`, action: a.action_name, title: `Promote ${a.display_name} from tina_review → auto`, status: "open" as const, issue: undefined as number | undefined })) },
-      { id: "phase-g", name: "Phase G — Money-path L0 → L1 shadow", description: "Run all 5 money-path handlers in shadow mode for 30 days before considering promotion. ALEX kill-switch retained.", items: [
-        "count_qualifying_posts", "verify_bundle_completion", "calculate_total_compensation", "process_fixed_rate_payment", "reconcile_payment",
-      ].map((name) => ({ id: `SHADOW-${name.toUpperCase()}`, action: name, title: `30-day shadow eval for ${name}`, status: "open" as const, issue: undefined as number | undefined })) },
-    ];
-    res.json(phases);
-  });
-
-  // Markdown executive brief
-  app.get("/api/exec-brief.md", (_req, res) => {
-    const r = rollups(ACTIONS);
-    const hitl = hitlHoursPerWeek();
-    const promo = hitl.filter((x) => x.promotable).sort((a, b) => b.hours_per_week - a.hours_per_week);
-    const promotableHrs = promo.reduce((s, x) => s + x.hours_per_week, 0);
-    const trainPct = (r.total_training_rows / r.total_training_target) * 100;
-    const lines: string[] = [];
-    lines.push(`# SID Autonomy — Executive Brief`);
-    lines.push(`_Snapshot 2026-04-29 · 40 canonical actions · 14 sampling + 26 paid_deal_`);
-    lines.push("");
-    lines.push(`## Topline`);
-    lines.push(`- Production readiness (avg): **${r.avg_prod_readiness_pct.toFixed(0)}%**`);
-    lines.push(`- Handlers wired: **${r.avg_handler_pct.toFixed(0)}%**`);
-    lines.push(`- Training backfill: **${trainPct.toFixed(0)}%** (${r.total_training_rows.toLocaleString()} of ${r.total_training_target.toLocaleString()} rows)`);
-    lines.push(`- Eval pass (avg): **${r.avg_eval_pass_pct.toFixed(0)}%** across ${r.total_fixtures.toLocaleString()} fixtures`);
-    lines.push(`- Outcome-full evals: **${r.actions_outcome_full} / ${r.total_actions}** (${r.actions_no_evals} structural-only)`);
-    lines.push(`- Estimated weekly HITL burden: **${hitl.reduce((s, x) => s + x.hours_per_week, 0).toFixed(0)} hrs/wk**`);
-    lines.push(`- Recoverable via Phase F gate flips: **${promotableHrs.toFixed(0)} hrs/wk**`);
-    lines.push("");
-    lines.push(`## What shipped recently (last 9 days)`);
-    LIVE_FEED.filter((f) => f.category === "autonomy" || f.category === "evals").slice(0, 8).forEach((f) => {
-      lines.push(`- #${f.number} ${f.title}`);
-    });
-    lines.push("");
-    lines.push(`## Top promotion candidates (Phase F)`);
-    promo.slice(0, 8).forEach((x) => {
-      lines.push(`- **${x.display_name}** — ${x.hours_per_week.toFixed(0)} hrs/wk recoverable, eval ${x.eval_pass_pct}%`);
-    });
-    lines.push("");
-    lines.push(`## Open blockers`);
-    OPEN_BLOCKERS.forEach((b) => lines.push(`- #${b.number} ${b.title}`));
-    res.type("text/markdown").send(lines.join("\n"));
-  });
+  // /api/roadmap (hardcoded A–G phases) and /api/exec-brief.md (SID rollups)
+  // removed during content-platform redesign. New equivalents:
+  //   /api/content-platform/roadmap  (live GitHub milestones across 4 repos)
+  //   /api/content-platform/overview (corpus / A/B / IDS / Veo / ScriptSage)
+  //   /api/content-platform/promotion-candidates
 
   // ============ Autonomy status ============
   // Snapshot of the always-on engine: resume flags, concurrency caps, in-flight counts.
@@ -627,24 +523,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // CSV export of the full action grid
-  app.get("/api/actions.csv", (_req, res) => {
-    const rows = [
-      ["action_name", "class", "#", "display_name", "hitl_gate", "autonomy_level", "handler_pct", "fixtures_pct", "fixture_count", "training_rows", "training_target", "training_backfill_pct", "eval_pass_pct", "eval_corpus_size", "eval_status", "prod_readiness_pct", "money_path", "weekly_runs_per_brand", "human_minutes_per_run"],
-    ];
-    ACTIONS.forEach((a) => {
-      const x = getExtras(a.action_name);
-      rows.push([
-        a.action_name, a.class, String(a.action_number), a.display_name, a.hitl_gate, a.autonomy_level,
-        String(a.handler_pct), String(a.fixtures_pct), String(a.fixture_count),
-        String(a.training_rows), String(a.training_target), String(a.training_backfill_pct),
-        String(a.eval_pass_pct ?? ""), String(a.eval_corpus_size), a.eval_status, String(a.prod_readiness_pct),
-        String(x.money_path), String(x.weekly_runs_per_brand), String(x.human_minutes_per_run),
-      ]);
-    });
-    const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-    res.type("text/csv").send(csv);
-  });
+  // /api/actions.csv removed (SID action grid). Content-platform exports
+  // are per-section endpoints under /api/content-platform/*.
 
   return httpServer;
 }
