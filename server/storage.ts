@@ -172,6 +172,15 @@ function ensureSchema() {
   if (!cHas("organizer_cron_interval_minutes")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN organizer_cron_interval_minutes INTEGER NOT NULL DEFAULT 30");
   if (!cHas("organizer_last_run_at")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN organizer_last_run_at TEXT");
   if (!cHas("organizer_last_stats_json")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN organizer_last_stats_json TEXT");
+  // Content-platform service URLs + tokens (DB-driven, so they can be edited
+  // from the Autonomy page without redeploying). Env vars still take priority
+  // in the clients; these are the fallback / production default.
+  if (!cHas("dna_api_base")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN dna_api_base TEXT NOT NULL DEFAULT ''");
+  if (!cHas("dna_api_token")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN dna_api_token TEXT NOT NULL DEFAULT ''");
+  if (!cHas("scriptsage_api_base")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN scriptsage_api_base TEXT NOT NULL DEFAULT ''");
+  if (!cHas("scriptsage_api_token")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN scriptsage_api_token TEXT NOT NULL DEFAULT ''");
+  if (!cHas("gke_queue_api_base")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN gke_queue_api_base TEXT NOT NULL DEFAULT ''");
+  if (!cHas("image_engine_api_base")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN image_engine_api_base TEXT NOT NULL DEFAULT ''");
   // Explorer dynamic pause controls
   if (!cHas("explorer_max_open_issues")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN explorer_max_open_issues INTEGER NOT NULL DEFAULT 1000");
   if (!cHas("explorer_dynamic_pause_enabled")) sqlite.exec("ALTER TABLE cron_config ADD COLUMN explorer_dynamic_pause_enabled INTEGER NOT NULL DEFAULT 1");
