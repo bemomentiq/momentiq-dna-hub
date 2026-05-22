@@ -3,6 +3,7 @@ import { useParams, Link } from "wouter";
 import { Layout } from "@/components/Layout";
 import { StatCard } from "@/components/StatCard";
 import { Skeleton, EmptyState, ErrorState } from "@/components/states";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { ArrowLeft, Activity, DollarSign, TrendingUp, GitBranch, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -155,6 +156,14 @@ export default function ThemeDetail() {
       title={theme.theme || slug || "Theme"}
       subtitle="Champion configuration, A/B variants, and promotion lineage"
       actions={backLink}
+      breadcrumbs={
+        <Breadcrumbs
+          items={[
+            { label: "Themes", href: "/themes" },
+            { label: slug ?? theme.theme ?? "Theme" },
+          ]}
+        />
+      }
     >
       {/* Champion summary card */}
       <section className="rounded-lg border border-card-border bg-card p-5 mb-5">
