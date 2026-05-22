@@ -19,6 +19,7 @@ const items = [
   { href: "/training", label: "Training Data", icon: Database },
   { href: "/subscriptions", label: "Subscriptions", icon: DollarSign },
   { href: "/evals", label: "Evals", icon: Activity },
+  { href: "/scoring", label: "IDS Scoring", icon: Activity },
   { href: "/hitl", label: "HITL Burden", icon: Hourglass },
   { href: "/veo-cost", label: "Veo Cost & ROI", icon: DollarSign },
   { href: "/issues", label: "GitHub Issues", icon: GitPullRequest },

@@ -432,6 +432,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
   });
 
+  // IDS distribution proxy: 5-dimension scorecard + overall composite. Returns
+  // dna_configured=false when DNA_API_BASE is unset so the client can render an
+  // empty-state instead of crashing.
+  app.get("/api/content-platform/ids-distribution", async (req, res) => {
+    const windowDaysRaw = parseInt(String(req.query.window_days ?? "7"), 10);
+    const windowDays = Number.isFinite(windowDaysRaw) && windowDaysRaw > 0 ? windowDaysRaw : 7;
+    const ids = await dnaClient.idsDistribution(windowDays);
+    res.json({
+      dna_configured: dnaClient.configured(),
+      distributions: ids?.distributions ?? null,
+      window_days: ids?.window_days ?? windowDays,
+      fetched_at: new Date().toISOString(),
+    });
+  });
+
   // Reachability probes for upstream content-platform services. Bypasses the
   // read cache — sidebar pill / monitors should see live status.
   app.get("/api/content-platform/health", async (_req, res) => {

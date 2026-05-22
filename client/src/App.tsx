@@ -26,6 +26,7 @@ import Run from "@/pages/Run";
 import Fleet from "@/pages/Fleet";
 import Autonomy from "@/pages/Autonomy";
 import Themes from "@/pages/Themes";
+import Scoring from "@/pages/Scoring";
 import ThemeDetail from "@/pages/ThemeDetail";
 
 function AppRouter() {
@@ -49,6 +50,7 @@ function AppRouter() {
       <Route path="/ab-runs" component={AbRuns} />
       <Route path="/subscriptions" component={Subscriptions} />
       <Route path="/evals" component={Evals} />
+      <Route path="/scoring" component={Scoring} />
       <Route path="/hitl" component={HitlBurden} />
       <Route path="/money-path" component={MoneyPath} />
       <Route path="/veo-cost" component={VeoCost} />
