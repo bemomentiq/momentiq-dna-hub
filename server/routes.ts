@@ -343,6 +343,111 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
   });
 
+  // ScriptSage throughput dashboard: stats + job-health, served in one round-trip.
+  // Both upstream helpers return null when SCRIPTSAGE_API_BASE is unset, so the
+  // client renders an empty-state without crashing.
+  app.get("/api/content-platform/scriptsage", async (_req, res) => {
+    const [stats, jobsResp] = await Promise.all([
+      scriptsageClient.stats(),
+      scriptsageClient.jobs(),
+    ]);
+    res.json({
+      scriptsage_configured: scriptsageClient.configured(),
+      stats,
+      jobs: jobsResp?.jobs ?? null,
+      fetched_at: new Date().toISOString(),
+    });
+  });
+
+  // Veo cost & ROI by theme — proxies dnaClient.veoCost. Returns
+  // { dna_configured, summary, total_cost_usd, window_days }. When dna is not
+  // configured (DNA_API_BASE unset) the upstream returns null and we surface
+  // an empty payload so the page can render its empty-state.
+  app.get("/api/content-platform/veo-cost", async (req, res) => {
+    const raw = parseInt(String(req.query.window_days ?? "7"), 10);
+    const windowDays = [7, 14, 30].includes(raw) ? raw : 7;
+    const configured = dnaClient.configured();
+    const upstream = await dnaClient.veoCost(windowDays);
+    // When DNA is configured but veoCost returns null, that's an upstream
+    // failure (network/5xx) — surface it as 502 with upstream_error so the
+    // client can render a distinct error state instead of collapsing to
+    // "no Veo calls". Bugbot flagged this on PR #19.
+    if (configured && upstream === null) {
+      return void res.status(502).json({
+        dna_configured: true,
+        upstream_error: true,
+        summary: [],
+        total_cost_usd: 0,
+        window_days: windowDays,
+      });
+    }
+    res.json({
+      dna_configured: configured,
+      upstream_error: false,
+      summary: upstream?.summary ?? [],
+      total_cost_usd: upstream?.total_cost_usd ?? 0,
+      window_days: upstream?.window_days ?? windowDays,
+    });
+  });
+
+  // Per-theme drill-down: champion config + variants (A/B runs).
+  // Returns { dna_configured, theme, variants } so the client can render an
+  // empty-state when DNA_API_BASE is unset, instead of 502'ing.
+  app.get("/api/content-platform/themes/:slug", async (req, res) => {
+    const data = await dnaClient.theme(req.params.slug);
+    res.json({
+      dna_configured: dnaClient.configured(),
+      slug: req.params.slug,
+      theme: data?.theme ?? null,
+      variants: data?.variants ?? null,
+      fetched_at: new Date().toISOString(),
+    });
+  });
+
+  // Subscriptions & credit burn — proxies ScriptSage. Returns empty payload
+  // (subscriptions: null) when the upstream is unconfigured so the page renders
+  // a graceful empty state.
+  app.get("/api/content-platform/subscriptions", async (_req, res) => {
+    const subs = await scriptsageClient.subscriptions();
+    res.json({
+      scriptsage_configured: scriptsageClient.configured(),
+      subscriptions: subs,
+      fetched_at: new Date().toISOString(),
+    });
+  });
+
+  // A/B runs proxy: forwards optional status / limit filters to dnaClient and
+  // returns null payload when DNA_API_BASE is unset so the UI can render an
+  // empty-state instead of erroring.
+  app.get("/api/content-platform/ab-runs", async (req, res) => {
+    const status = typeof req.query.status === "string" ? req.query.status : undefined;
+    const limit = typeof req.query.limit === "string" ? Number(req.query.limit) : undefined;
+    const data = await dnaClient.abRuns({
+      status,
+      limit: Number.isFinite(limit) ? limit : undefined,
+    });
+    res.json({
+      dna_configured: dnaClient.configured(),
+      runs: data?.runs ?? null,
+      fetched_at: new Date().toISOString(),
+    });
+  });
+
+  // IDS distribution proxy: 5-dimension scorecard + overall composite. Returns
+  // dna_configured=false when DNA_API_BASE is unset so the client can render an
+  // empty-state instead of crashing.
+  app.get("/api/content-platform/ids-distribution", async (req, res) => {
+    const windowDaysRaw = parseInt(String(req.query.window_days ?? "7"), 10);
+    const windowDays = Number.isFinite(windowDaysRaw) && windowDaysRaw > 0 ? windowDaysRaw : 7;
+    const ids = await dnaClient.idsDistribution(windowDays);
+    res.json({
+      dna_configured: dnaClient.configured(),
+      distributions: ids?.distributions ?? null,
+      window_days: ids?.window_days ?? windowDays,
+      fetched_at: new Date().toISOString(),
+    });
+  });
+
   // Promotion candidates: completed A/B runs whose champion clears the
   // promotion gate (IDS >= 0.85 AND delta_vs_control >= 0.10). Returns [] when
   // the dna service is unreachable so the executive brief renders an empty
