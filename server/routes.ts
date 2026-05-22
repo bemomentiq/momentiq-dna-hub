@@ -326,6 +326,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       ab_runs_active: abRuns?.runs.length ?? null,
       ids_median_7d: overall?.median ?? null,
       veo_spend_7d_usd: veo?.total_cost_usd ?? null,
+      veo_themes_7d: veo?.summary ?? null,
       scriptsage: ssStats,
       subscriptions: ssSubs,
       fetched_at: new Date().toISOString(),
@@ -443,6 +444,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       dna_configured: dnaClient.configured(),
       distributions: ids?.distributions ?? null,
       window_days: ids?.window_days ?? windowDays,
+      fetched_at: new Date().toISOString(),
+    });
+  });
+
+  // Promotion candidates: completed A/B runs whose champion clears the
+  // promotion gate (IDS >= 0.85 AND delta_vs_control >= 0.10). Returns [] when
+  // the dna service is unreachable so the executive brief renders an empty
+  // state rather than erroring out.
+  app.get("/api/content-platform/promotion-candidates", async (_req, res) => {
+    const data = await dnaClient.abRuns({ status: "completed", limit: 50 });
+    const runs = data?.runs ?? [];
+    const candidates = runs.filter(
+      (r) => (r.ids_mean ?? 0) >= 0.85 && (r.delta_vs_control ?? 0) >= 0.1
+    );
+    res.json({
+      dna_configured: dnaClient.configured(),
+      candidates,
       fetched_at: new Date().toISOString(),
     });
   });

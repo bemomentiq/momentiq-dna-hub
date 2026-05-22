@@ -1,128 +1,357 @@
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
-import { ProgressBar } from "@/components/StatCard";
-import type { AutonomyAction, Rollups, HitlBurden, Feed } from "@/lib/types";
-import { Link } from "wouter";
-import { Download, ArrowUpRight, Shield, Database, Activity, Hourglass } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { TrendingUp, Sparkles, AlertOctagon, DollarSign, ExternalLink } from "lucide-react";
+
+type VeoTheme = {
+  theme: string;
+  calls: number;
+  total_cost_usd: number;
+  avg_cost_per_video: number;
+  winning_videos: number;
+  cost_per_winner: number | null;
+};
+
+type Overview = {
+  dna_configured: boolean;
+  scriptsage_configured: boolean;
+  corpus: { videos: number; gmv_usd: number; last_harvest_at: string | null } | null;
+  ab_runs_active: number | null;
+  ids_median_7d: number | null;
+  veo_spend_7d_usd: number | null;
+  veo_themes_7d: VeoTheme[] | null;
+  scriptsage: {
+    scripts_generated_7d: number;
+    videos_generated_7d: number;
+    scripts_generated_24h: number;
+    videos_generated_24h: number;
+  } | null;
+  subscriptions: { active_users: number; mrr_usd: number } | null;
+  fetched_at: string;
+};
+
+type AbRun = {
+  run_id: string;
+  theme: string;
+  status: string;
+  videos_scored: number;
+  videos_budget: number;
+  ids_mean: number | null;
+  delta_vs_control: number | null;
+  veo_cost_usd: number | null;
+  roi_usd: number | null;
+  started_at: string;
+  completed_at: string | null;
+};
+
+type PromotionResp = {
+  dna_configured: boolean;
+  candidates: AbRun[];
+  fetched_at: string;
+};
+
+type GhIssue = {
+  number: number;
+  title: string;
+  html_url: string;
+  repo: string;
+  labels: string[];
+  updated_at: string;
+};
+
+type GhIssuesResp = { issues: GhIssue[] };
+
+const dash = "—";
+
+function fmtNum(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return dash;
+  return n.toLocaleString();
+}
+
+function fmtUsd(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return dash;
+  return `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+}
+
+function fmtPct(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return dash;
+  return `${(n * 100).toFixed(0)}%`;
+}
+
+function fmtDelta(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return dash;
+  const sign = n >= 0 ? "+" : "";
+  return `${sign}${(n * 100).toFixed(1)}pp`;
+}
 
 export default function ExecutiveBrief() {
-  const { data: r } = useQuery<Rollups>({ queryKey: ["/api/rollups"] });
-  const { data: actions = [] } = useQuery<AutonomyAction[]>({ queryKey: ["/api/actions"] });
-  const { data: hitl = [] } = useQuery<HitlBurden[]>({ queryKey: ["/api/hitl-burden"] });
-  const { data: feed } = useQuery<Feed>({ queryKey: ["/api/feed"] });
+  const { data: overview } = useQuery<Overview>({ queryKey: ["/api/content-platform/overview"] });
+  const {
+    data: promo,
+    isPending: promoPending,
+    isError: promoIsError,
+    error: promoError,
+  } = useQuery<PromotionResp>({ queryKey: ["/api/content-platform/promotion-candidates"] });
+  const {
+    data: ghIssues,
+    isPending: ghIssuesPending,
+    isError: ghIssuesIsError,
+    error: ghIssuesError,
+  } = useQuery<GhIssuesResp>({
+    queryKey: ["/api/gh-issues?state=open&labels=blocker"],
+  });
+  const {
+    data: ghBugs,
+    isPending: ghBugsPending,
+    isError: ghBugsIsError,
+    error: ghBugsError,
+  } = useQuery<GhIssuesResp>({
+    queryKey: ["/api/gh-issues?state=open&labels=bug"],
+  });
+  const blockersPending = ghIssuesPending || ghBugsPending;
+  const blockersIsError = ghIssuesIsError || ghBugsIsError;
+  const blockersError = ghIssuesError || ghBugsError;
 
-  if (!r) return <Layout title="Executive Brief"><div className="text-muted-foreground">Loading…</div></Layout>;
+  const blockers = [
+    ...(ghIssues?.issues ?? []),
+    ...(ghBugs?.issues ?? []),
+  ]
+    .filter(
+      (iss, idx, arr) =>
+        arr.findIndex((x) => x.number === iss.number && x.repo === iss.repo) === idx
+    )
+    .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+    .slice(0, 5);
 
-  const trainPct = (r.total_training_rows / r.total_training_target) * 100;
-  const top5 = [...hitl].filter((x) => x.promotable).sort((a, b) => b.hours_per_week - a.hours_per_week).slice(0, 5);
-  const moneyPath = actions.filter((a) => ["count_qualifying_posts", "verify_bundle_completion", "calculate_total_compensation", "process_fixed_rate_payment", "reconcile_payment"].includes(a.action_name));
-  const moneyAvg = moneyPath.reduce((s, a) => s + a.prod_readiness_pct, 0) / moneyPath.length;
+  const candidates = promo?.candidates ?? [];
+
+  const topThemes: VeoTheme[] = (overview?.veo_themes_7d ?? [])
+    .slice()
+    .sort((a, b) => b.total_cost_usd - a.total_cost_usd)
+    .slice(0, 3);
 
   return (
     <Layout
-      title="Executive Brief"
-      subtitle="One-page status of SID autonomy — share-ready · auto-derived from live action seed + GitHub feed"
-      actions={
-        <a href="/api/exec-brief.md" download className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border border-card-border hover:bg-accent transition-colors">
-          <Download className="h-3.5 w-3.5" /> Download .md
-        </a>
-      }
+      title="AI Content Platform · Executive Brief"
+      subtitle="Live snapshot of corpus growth, A/B promotions, blockers, and Veo spend"
     >
       <div className="max-w-4xl mx-auto space-y-6">
-        <section className="rounded-lg border border-card-border bg-card p-6">
-          <h2 className="text-base font-semibold mb-4">Where we stand</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Pillar icon={<Shield className="h-4 w-4" />} label="Production readiness" value={`${r.avg_prod_readiness_pct.toFixed(0)}%`} desc="avg across 40 actions" />
-            <Pillar icon={<Activity className="h-4 w-4" />} label="Eval pass rate" value={`${r.avg_eval_pass_pct.toFixed(0)}%`} desc={`${r.total_fixtures.toLocaleString()} fixtures`} />
-            <Pillar icon={<Database className="h-4 w-4" />} label="Training backfill" value={`${trainPct.toFixed(0)}%`} desc={`${r.total_training_rows.toLocaleString()} rows`} />
-            <Pillar icon={<Hourglass className="h-4 w-4" />} label="HITL burden" value={`${r.total_human_hours_per_week.toFixed(0)}h/wk`} desc={`${r.promotable_hours_per_week.toFixed(0)}h recoverable`} />
-          </div>
-        </section>
+        {/* 1. Topline (7d) */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              Topline (7d)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <Metric
+                label="Corpus size"
+                value={fmtNum(overview?.corpus?.videos)}
+                sub={
+                  overview?.corpus?.last_harvest_at
+                    ? `last harvest ${overview.corpus.last_harvest_at.slice(0, 10)}`
+                    : dash
+                }
+              />
+              <Metric
+                label="Scripts generated"
+                value={fmtNum(overview?.scriptsage?.scripts_generated_7d)}
+                sub={
+                  overview?.scriptsage
+                    ? `${fmtNum(overview.scriptsage.scripts_generated_24h)} in 24h`
+                    : dash
+                }
+              />
+              <Metric
+                label="Videos generated"
+                value={fmtNum(overview?.scriptsage?.videos_generated_7d)}
+                sub={
+                  overview?.scriptsage
+                    ? `${fmtNum(overview.scriptsage.videos_generated_24h)} in 24h`
+                    : dash
+                }
+              />
+              <Metric
+                label="MRR"
+                value={fmtUsd(overview?.subscriptions?.mrr_usd)}
+                sub={
+                  overview?.subscriptions
+                    ? `${fmtNum(overview.subscriptions.active_users)} active users`
+                    : dash
+                }
+              />
+            </div>
+          </CardContent>
+        </Card>
 
-        <section className="rounded-lg border border-card-border bg-card p-6">
-          <h2 className="text-base font-semibold mb-3">The 30-second story</h2>
-          <p className="text-sm leading-relaxed">
-            All 40 canonical actions have wired handlers (avg <strong>{r.avg_handler_pct.toFixed(0)}%</strong>) and the LLM intent classifier is live in production at <strong>99% pass</strong> on a 1,088-case corpus. Phase A and Phase B (10 zero-fixture actions) closed in the last week. The remaining work is concentrated in three areas:
-          </p>
-          <ol className="mt-3 space-y-2 text-sm list-decimal pl-5">
-            <li><strong>Outcome-based evals</strong> — only {r.actions_outcome_full} of {r.total_actions} actions have full D+14 reward joins. {r.actions_no_evals} are still structural-only.</li>
-            <li><strong>Training backfill</strong> — {(r.total_training_target - r.total_training_rows).toLocaleString()} rows still to ingest, mostly from Reacher, cos_runs, and Fireflies.</li>
-            <li><strong>HITL gate flips</strong> — {top5.reduce((s, x) => s + x.hours_per_week, 0).toFixed(0)} hrs/wk of human review can be reclaimed by promoting {top5.length} tina_review actions whose evals already pass ≥ 90%.</li>
-          </ol>
-        </section>
+        {/* 2. Promotion candidates */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-muted-foreground" />
+              Promotion candidates
+              <Badge variant="secondary" className="ml-1">
+                IDS ≥ 0.85 · Δ ≥ +10pp
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {promoPending ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : promoIsError ? (
+              <div
+                className="text-sm text-rose-600 dark:text-rose-400 p-3 rounded-md border border-rose-500/30 bg-rose-500/5"
+                data-testid="promo-error"
+              >
+                Failed to load promotion candidates
+                {promoError instanceof Error ? ` — ${promoError.message}` : ""}
+              </div>
+            ) : candidates.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                {dash} no completed runs currently clear the promotion gate.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {candidates.map((c) => (
+                  <li
+                    key={c.run_id}
+                    className="flex items-center justify-between gap-3 p-3 rounded-md border border-card-border"
+                    data-testid={`promo-candidate-${c.run_id}`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium text-sm truncate">{c.theme || dash}</div>
+                      <div className="text-xs text-muted-foreground">
+                        run <span className="font-mono">{c.run_id.slice(0, 8)}</span> ·{" "}
+                        {c.videos_scored}/{c.videos_budget} videos
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Badge variant="outline" className="tabular-nums">
+                        IDS {fmtPct(c.ids_mean)}
+                      </Badge>
+                      <Badge variant="default" className="tabular-nums">
+                        Δ {fmtDelta(c.delta_vs_control)}
+                      </Badge>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
 
-        <section className="rounded-lg border border-card-border bg-card p-6">
-          <h2 className="text-base font-semibold mb-3">Top 5 unlocks (Phase F gate flips)</h2>
-          <p className="text-xs text-muted-foreground mb-3">Recoverable hours assume 37 active brands at current weekly run rate. Eval pass ≥ 90% means the auto-decision agrees with Tina's label on a ≥200-case corpus.</p>
-          <div className="space-y-2">
-            {top5.map((x) => (
-              <Link key={x.action_name} href={`/actions/${x.action_name}`} className="flex items-center justify-between gap-4 p-3 rounded-md border border-card-border hover:border-primary/30 transition-colors">
-                <div className="min-w-0 flex-1">
-                  <div className="font-medium text-sm">{x.display_name}</div>
-                  <div className="text-xs text-muted-foreground">{x.weekly_runs.toFixed(0)} runs/wk · {x.minutes_per_run} min review · eval {x.eval_pass_pct}%</div>
-                </div>
-                <div className="text-right">
-                  <div className="font-semibold tabular-nums">{x.hours_per_week.toFixed(0)} h/wk</div>
-                  <div className="text-[10px] uppercase text-emerald-600 dark:text-emerald-400 font-medium">recoverable</div>
-                </div>
-                <ArrowUpRight className="h-4 w-4 text-muted-foreground shrink-0" />
-              </Link>
-            ))}
-          </div>
-        </section>
+        {/* 3. Blockers */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <AlertOctagon className="h-4 w-4 text-rose-500" />
+              Blockers
+              <Badge variant="secondary" className="ml-1">
+                open · blocker/bug
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {blockersIsError ? (
+              <div
+                className="text-sm text-rose-600 dark:text-rose-400 p-3 rounded-md border border-rose-500/30 bg-rose-500/5"
+                data-testid="blockers-error"
+              >
+                Failed to load blockers from GitHub
+                {blockersError instanceof Error ? ` — ${blockersError.message}` : ""}
+              </div>
+            ) : blockersPending ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : blockers.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                {dash} no open blockers across content repos.
+              </p>
+            ) : (
+              <ul className="space-y-1.5">
+                {blockers.map((b) => (
+                  <li
+                    key={`${b.repo}-${b.number}`}
+                    className="text-sm flex items-baseline gap-3"
+                  >
+                    <a
+                      href={b.html_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs font-mono text-primary shrink-0 inline-flex items-center gap-1"
+                    >
+                      #{b.number} <ExternalLink className="h-3 w-3" />
+                    </a>
+                    <span className="text-[10px] font-mono text-muted-foreground shrink-0">
+                      {b.repo.split("/")[1]}
+                    </span>
+                    <span className="truncate">{b.title}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
 
-        <section className="rounded-lg border border-card-border bg-card p-6">
-          <h2 className="text-base font-semibold mb-3">Money path (extra scrutiny)</h2>
-          <p className="text-xs text-muted-foreground mb-3">5 actions touching payment dispatch and reconciliation. Avg readiness <strong>{moneyAvg.toFixed(0)}%</strong>. ALEX kill-switch retained on all; promotion blocked until 30-day shadow.</p>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-            {moneyPath.map((a) => (
-              <Link key={a.action_name} href={`/actions/${a.action_name}`} className="rounded-md border border-card-border bg-background p-3 hover:border-primary/30 transition-colors block">
-                <div className="text-[10px] font-mono text-muted-foreground">PD #{a.action_number}</div>
-                <div className="font-medium text-xs leading-tight mt-1 line-clamp-2 min-h-[2rem]">{a.display_name}</div>
-                <div className="mt-2"><ProgressBar value={a.prod_readiness_pct} tone={a.prod_readiness_pct >= 85 ? "good" : "warn"} /></div>
-                <div className="mt-1 text-[10px] tabular-nums">{a.prod_readiness_pct}% ready</div>
-              </Link>
-            ))}
-          </div>
-        </section>
-
-        <section className="rounded-lg border border-card-border bg-card p-6">
-          <h2 className="text-base font-semibold mb-3">Last 9 days · 10 autonomy ships</h2>
-          <ul className="space-y-1.5">
-            {feed?.recent.filter((f) => f.category === "autonomy" || f.category === "evals").slice(0, 10).map((f) => (
-              <li key={f.number} className="text-sm flex items-baseline gap-3">
-                <span className="text-[10px] font-mono text-muted-foreground tabular-nums">{f.date.slice(5)}</span>
-                <a href={`https://github.com/bemomentiq/momentiq-dna/pull/${f.number}`} target="_blank" rel="noreferrer" className="text-xs font-mono text-primary">#{f.number}</a>
-                <span className="text-sm">{f.title}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        {feed?.blockers && feed.blockers.length > 0 && (
-          <section className="rounded-lg border border-rose-500/40 bg-rose-500/5 p-6">
-            <h2 className="text-base font-semibold mb-3">Open blockers</h2>
-            <ul className="space-y-1.5">
-              {feed.blockers.map((b) => (
-                <li key={b.number} className="text-sm flex items-baseline gap-3">
-                  <a href={`https://github.com/bemomentiq/momentiq-dna/issues/${b.number}`} target="_blank" rel="noreferrer" className="text-xs font-mono text-primary shrink-0">#{b.number}</a>
-                  <span>{b.title}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
+        {/* 4. Veo spend (7d) */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
+              Veo spend (7d)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-baseline gap-3 mb-3">
+              <span className="text-2xl font-semibold tabular-nums">
+                {fmtUsd(overview?.veo_spend_7d_usd)}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                total Veo cost · 7-day window
+              </span>
+            </div>
+            {topThemes.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                {dash} per-theme breakdown not available.
+              </p>
+            ) : (
+              <ul className="space-y-1.5">
+                {topThemes.map((t) => (
+                  <li
+                    key={t.theme}
+                    className="flex items-center justify-between gap-3 p-2 rounded-md border border-card-border text-sm"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium truncate">{t.theme || dash}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {fmtNum(t.calls)} calls · {fmtNum(t.winning_videos)} winners
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0 tabular-nums">
+                      <div className="font-semibold">{fmtUsd(t.total_cost_usd)}</div>
+                      <div className="text-[10px] text-muted-foreground">
+                        {fmtUsd(t.cost_per_winner)}/winner
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </Layout>
   );
 }
 
-function Pillar({ icon, label, value, desc }: { icon: React.ReactNode; label: string; value: string; desc: string }) {
+function Metric({ label, value, sub }: { label: string; value: string; sub: string }) {
   return (
     <div>
-      <div className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">{icon} {label}</div>
+      <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
       <div className="mt-1 text-2xl font-semibold tabular-nums">{value}</div>
-      <div className="text-xs text-muted-foreground">{desc}</div>
+      <div className="text-xs text-muted-foreground">{sub}</div>
     </div>
   );
 }
