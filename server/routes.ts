@@ -106,6 +106,205 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ issues: all, repos, errors, fetched_at: new Date().toISOString() });
   });
 
+  // Live roadmap: GitHub milestones + epic:* labelled issues across the 4 content repos.
+  // Groups issues by epic:* label; non-fatal per-repo errors are surfaced in `errors`.
+  app.get("/api/content-platform/roadmap", async (_req, res) => {
+    const cfg = storage.getCronConfig() as any;
+    const token = cfg.github_token || process.env.GITHUB_TOKEN || process.env.GH_TOKEN || null;
+    if (!token || String(token).length < 10) {
+      return void res.status(400).json({ error: "GitHub token not configured" });
+    }
+    const repos = [
+      "bemomentiq/momentiq-dna",
+      "bemomentiq/momentiq-dna-hub",
+      "bemomentiq/momentiq-scriptsage-backend",
+      "bemomentiq/momentiq-scriptsage-frontend",
+    ];
+    const headers = {
+      "Accept": "application/vnd.github+json",
+      "Authorization": `Bearer ${token}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+    };
+
+    type Milestone = {
+      repo: string;
+      number: number;
+      title: string;
+      description: string | null;
+      state: string;
+      open_issues: number;
+      closed_issues: number;
+      due_on: string | null;
+      html_url: string;
+    };
+    type EpicIssue = {
+      repo: string;
+      number: number;
+      title: string;
+      state: string;
+      html_url: string;
+      labels: string[];
+      updated_at: string;
+    };
+    type EpicGroup = {
+      label: string;
+      title: string;
+      description: string;
+      open: number;
+      closed: number;
+      total: number;
+      issues: EpicIssue[];
+      html_url: string;
+    };
+
+    const milestones: Milestone[] = [];
+    const epicMap = new Map<string, EpicGroup>();
+    const errors: string[] = [];
+
+    for (const repo of repos) {
+      // Milestones (open + closed)
+      try {
+        const r = await fetch(
+          `https://api.github.com/repos/${repo}/milestones?state=all&per_page=100&sort=due_on&direction=asc`,
+          { headers },
+        );
+        if (!r.ok) {
+          errors.push(`${repo} milestones ${r.status}`);
+        } else {
+          const items = (await r.json()) as any[];
+          for (const m of items) {
+            milestones.push({
+              repo,
+              number: m.number,
+              title: m.title,
+              description: m.description ?? null,
+              state: m.state,
+              open_issues: m.open_issues ?? 0,
+              closed_issues: m.closed_issues ?? 0,
+              due_on: m.due_on ?? null,
+              html_url: m.html_url,
+            });
+          }
+        }
+      } catch (err: any) {
+        errors.push(`${repo} milestones: ${err?.message ?? err}`);
+      }
+
+      // Epic-labelled issues: discover epic:* labels per-repo, then query issues
+      // server-side by label so groups aren't truncated to the latest 100.
+      const epicLabelsForRepo: string[] = [];
+      try {
+        for (let page = 1; page <= 5; page++) {
+          const r = await fetch(
+            `https://api.github.com/repos/${repo}/labels?per_page=100&page=${page}`,
+            { headers },
+          );
+          if (!r.ok) {
+            errors.push(`${repo} labels ${r.status}`);
+            break;
+          }
+          const items = (await r.json()) as any[];
+          if (!items.length) break;
+          for (const l of items) {
+            const name: string | undefined = l?.name;
+            if (name && name.startsWith("epic:")) epicLabelsForRepo.push(name);
+          }
+          if (items.length < 100) break;
+        }
+      } catch (err: any) {
+        errors.push(`${repo} labels: ${err?.message ?? err}`);
+      }
+
+      // Dedupe per (repo, number) in case an issue carries multiple epic labels
+      // and the API returns it for each label query.
+      const seen = new Set<string>();
+      for (const epicLabel of epicLabelsForRepo) {
+        try {
+          for (let page = 1; page <= 5; page++) {
+            const params = new URLSearchParams({
+              labels: epicLabel,
+              state: "all",
+              per_page: "100",
+              page: String(page),
+            });
+            const r = await fetch(
+              `https://api.github.com/repos/${repo}/issues?${params}`,
+              { headers },
+            );
+            if (!r.ok) {
+              errors.push(`${repo} issues label=${epicLabel} ${r.status}`);
+              break;
+            }
+            const items = (await r.json()) as any[];
+            if (!items.length) break;
+            for (const i of items) {
+              if (i.pull_request) continue;
+              const labels: string[] = (i.labels || [])
+                .map((l: any) => (typeof l === "string" ? l : l.name))
+                .filter(Boolean);
+              const issueEpicLabels = labels.filter((l) => l.startsWith("epic:"));
+              if (issueEpicLabels.length === 0) continue;
+              for (const el of issueEpicLabels) {
+                const dedupeKey = `${repo}#${i.number}@${el}`;
+                if (seen.has(dedupeKey)) continue;
+                seen.add(dedupeKey);
+                let group = epicMap.get(el);
+                if (!group) {
+                  group = {
+                    label: el,
+                    title: el
+                      .slice(5)
+                      .split(/[-_]/)
+                      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+                      .join(" "),
+                    description: "",
+                    open: 0,
+                    closed: 0,
+                    total: 0,
+                    issues: [],
+                    html_url: `https://github.com/search?q=label%3A%22${encodeURIComponent(el)}%22+org%3Abemomentiq&type=issues`,
+                  };
+                  epicMap.set(el, group);
+                }
+                if (i.state === "open") group.open += 1;
+                else group.closed += 1;
+                group.total += 1;
+                group.issues.push({
+                  repo,
+                  number: i.number,
+                  title: i.title,
+                  state: i.state,
+                  html_url: i.html_url,
+                  labels,
+                  updated_at: i.updated_at,
+                });
+              }
+            }
+            if (items.length < 100) break;
+          }
+        } catch (err: any) {
+          errors.push(`${repo} issues label=${epicLabel}: ${err?.message ?? err}`);
+        }
+      }
+    }
+
+    const epics = Array.from(epicMap.values())
+      .map((e) => ({
+        ...e,
+        issues: e.issues.sort((a, b) => b.updated_at.localeCompare(a.updated_at)),
+      }))
+      .sort((a, b) => b.total - a.total);
+
+    milestones.sort((a, b) => {
+      if (a.state !== b.state) return a.state === "open" ? -1 : 1;
+      const ad = a.due_on ?? "9999";
+      const bd = b.due_on ?? "9999";
+      return ad.localeCompare(bd);
+    });
+
+    res.json({ milestones, epics, repos, errors, fetched_at: new Date().toISOString() });
+  });
+
   // Content-platform overview: aggregates dna corpus + A/B activity + ScriptSage
   // throughput + subscriptions + open issues across the 4 content repos.
   // Each upstream call returns null when its base URL env var is unset, so the
