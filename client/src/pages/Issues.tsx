@@ -4,6 +4,7 @@ import { ExternalLink, GitPullRequest, MessageSquare, RefreshCw, Github, AlertCi
 import { useState, useMemo, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { apiRequest } from "@/lib/queryClient";
+import { useUrlState } from "@/hooks/useUrlState";
 
 type GhIssue = {
   number: number;
@@ -43,8 +44,8 @@ const PRIORITY_TEXT: Record<string, string> = {
 
 export default function Issues() {
   const queryClient = useQueryClient();
-  const [state, setState] = useState<"open" | "closed" | "all">("open");
-  const [labelFilter, setLabelFilter] = useState<string>("");
+  const [state, setState] = useUrlState<"open" | "closed" | "all">("state", "open");
+  const [labelFilter, setLabelFilter] = useUrlState<string>("labels", "");
   const [repoFilter, setRepoFilter] = useState<string>("all");
 
   const queryString = labelFilter ? `?state=${state}&labels=${encodeURIComponent(labelFilter)}` : `?state=${state}`;
