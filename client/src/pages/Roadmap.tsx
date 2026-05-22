@@ -1,116 +1,275 @@
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
-import type { RoadmapPhase, AutonomyAction } from "@/lib/types";
-import { Link } from "wouter";
-import { CheckCircle2, Circle, Clock, ExternalLink } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { ExternalLink, AlertTriangle, Milestone as MilestoneIcon } from "lucide-react";
 
-const STATUS_BADGE = {
-  shipped: "text-emerald-600 dark:text-emerald-400",
-  in_progress: "text-amber-600 dark:text-amber-400",
-  open: "text-muted-foreground",
+type Milestone = {
+  repo: string;
+  number: number;
+  title: string;
+  description: string | null;
+  state: string;
+  open_issues: number;
+  closed_issues: number;
+  due_on: string | null;
+  html_url: string;
 };
 
-const STATUS_ICON = {
-  shipped: CheckCircle2,
-  in_progress: Clock,
-  open: Circle,
+type EpicIssue = {
+  repo: string;
+  number: number;
+  title: string;
+  state: string;
+  html_url: string;
+  labels: string[];
+  updated_at: string;
 };
+
+type EpicGroup = {
+  label: string;
+  title: string;
+  description: string;
+  open: number;
+  closed: number;
+  total: number;
+  issues: EpicIssue[];
+  html_url: string;
+};
+
+type RoadmapResp = {
+  milestones: Milestone[];
+  epics: EpicGroup[];
+  repos: string[];
+  errors: string[];
+  fetched_at: string;
+};
+
+function pct(closed: number, total: number) {
+  return total === 0 ? 0 : Math.round((closed / total) * 100);
+}
+
+function shortRepo(repo: string) {
+  return repo.replace(/^bemomentiq\//, "");
+}
 
 export default function Roadmap() {
-  const { data: phases = [] } = useQuery<RoadmapPhase[]>({ queryKey: ["/api/roadmap"] });
-  const { data: actions = [] } = useQuery<AutonomyAction[]>({ queryKey: ["/api/actions"] });
-  const actionMap = new Map(actions.map((a) => [a.action_name, a]));
+  const { data, isLoading, error } = useQuery<RoadmapResp>({
+    queryKey: ["/api/content-platform/roadmap"],
+  });
 
-  const totalItems = phases.reduce((s, p) => s + p.items.length, 0);
-  const shipped = phases.reduce((s, p) => s + p.items.filter((i) => i.status === "shipped").length, 0);
+  const tokenMissing =
+    (error as any)?.message?.includes("400") ||
+    (error as any)?.message?.toLowerCase?.().includes("github token");
+
+  const milestones = data?.milestones ?? [];
+  const epics = data?.epics ?? [];
+
+  const totalOpen = milestones.reduce((s, m) => s + m.open_issues, 0);
+  const totalClosed = milestones.reduce((s, m) => s + m.closed_issues, 0);
+  const totalAll = totalOpen + totalClosed;
 
   return (
     <Layout
-      title="Roadmap to Full Autonomy"
-      subtitle={`${shipped} of ${totalItems} milestones shipped · derived from FLEET tracker #3604 + per-action gap analysis`}
+      title="Live Roadmap"
+      subtitle={`GitHub milestones + epics across ${data?.repos.length ?? 4} content repos · ${totalClosed}/${totalAll} issues closed`}
     >
-      <div className="grid lg:grid-cols-3 gap-3 mb-6">
-        <div className="rounded-lg border border-card-border bg-card p-4">
-          <div className="text-xs text-muted-foreground uppercase tracking-wide">Overall Progress</div>
-          <div className="mt-1 text-2xl font-semibold tabular-nums">{Math.round((shipped / totalItems) * 100)}%</div>
-          <div className="mt-2 h-1.5 rounded-full bg-muted overflow-hidden">
-            <div className="h-full bg-primary transition-all" style={{ width: `${(shipped / totalItems) * 100}%` }} />
-          </div>
-        </div>
-        <div className="rounded-lg border border-card-border bg-card p-4">
-          <div className="text-xs text-muted-foreground uppercase tracking-wide">Phases</div>
-          <div className="mt-1 text-2xl font-semibold tabular-nums">{phases.length}</div>
-          <div className="mt-1 text-xs text-muted-foreground">A → G · LLM wire-up through money-path shadow</div>
-        </div>
-        <div className="rounded-lg border border-card-border bg-card p-4">
-          <div className="text-xs text-muted-foreground uppercase tracking-wide">Critical Path</div>
-          <div className="mt-1 text-sm font-medium">Phase F gate flips</div>
-          <div className="mt-0.5 text-xs text-muted-foreground">Promote 14 tina_review actions to auto once eval ≥ 95%</div>
-        </div>
-      </div>
+      {tokenMissing && (
+        <Card className="mb-6 border-amber-500/40 bg-amber-500/5">
+          <CardContent className="pt-6 flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+            <div className="text-sm">
+              <div className="font-medium">GitHub token not configured</div>
+              <div className="text-muted-foreground mt-1">
+                Set <code className="text-xs">github_token</code> in cron config (or
+                <code className="text-xs ml-1">GITHUB_TOKEN</code> env var) to enable live milestone data.
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-      <div className="space-y-5">
-        {phases.map((phase, idx) => {
-          const phaseShipped = phase.items.filter((i) => i.status === "shipped").length;
-          const pct = phase.items.length ? (phaseShipped / phase.items.length) * 100 : 0;
-          return (
-            <div key={phase.id} className="rounded-lg border border-card-border bg-card p-5">
-              <div className="flex items-start justify-between gap-4 mb-3">
-                <div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-mono px-2 py-0.5 rounded bg-muted text-muted-foreground">{idx + 1}</span>
-                    <h2 className="font-semibold">{phase.name}</h2>
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-1.5 max-w-3xl">{phase.description}</p>
-                </div>
-                <div className="text-right shrink-0">
-                  <div className="text-xs text-muted-foreground uppercase">Done</div>
-                  <div className="font-semibold tabular-nums">{phaseShipped} / {phase.items.length}</div>
-                </div>
-              </div>
-              <div className="h-1 rounded-full bg-muted overflow-hidden mb-4">
-                <div className={cn("h-full transition-all", pct === 100 ? "bg-emerald-500" : "bg-primary")} style={{ width: `${pct}%` }} />
-              </div>
-              <ul className="divide-y divide-card-border">
-                {phase.items.map((item) => {
-                  const Icon = STATUS_ICON[item.status];
-                  const action = item.action ? actionMap.get(item.action) : null;
+      {isLoading && (
+        <div className="text-sm text-muted-foreground">Loading milestones…</div>
+      )}
+
+      {data && (
+        <>
+          <div className="grid lg:grid-cols-3 gap-3 mb-6">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription className="uppercase text-xs tracking-wide">Overall Progress</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-semibold tabular-nums">{pct(totalClosed, totalAll)}%</div>
+                <Progress value={pct(totalClosed, totalAll)} className="h-1.5 mt-2" />
+                <div className="text-xs text-muted-foreground mt-1.5">{totalClosed} closed · {totalOpen} open</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription className="uppercase text-xs tracking-wide">Active Milestones</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-semibold tabular-nums">{milestones.filter((m) => m.state === "open").length}</div>
+                <div className="text-xs text-muted-foreground mt-1.5">{milestones.length} total across repos</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription className="uppercase text-xs tracking-wide">Epics</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-semibold tabular-nums">{epics.length}</div>
+                <div className="text-xs text-muted-foreground mt-1.5">Grouped by <code className="text-[10px]">epic:*</code> labels</div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {epics.length > 0 && (
+            <section className="mb-8">
+              <h2 className="text-lg font-semibold mb-3">Epics</h2>
+              <div className="grid gap-4">
+                {epics.map((epic) => {
+                  const epicPct = pct(epic.closed, epic.total);
                   return (
-                    <li key={item.id} className="py-2.5 flex items-start gap-3">
-                      <Icon className={cn("h-4 w-4 mt-0.5 shrink-0", STATUS_BADGE[item.status])} />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-baseline justify-between gap-3">
-                          <div className="font-mono text-[11px] text-muted-foreground uppercase">{item.id}</div>
-                          <div className="flex items-center gap-2 text-xs">
-                            {item.issue && (
-                              <a
-                                href={`https://github.com/bemomentiq/momentiq-dna/issues/${item.issue}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
-                              >
-                                #{item.issue} <ExternalLink className="h-3 w-3" />
-                              </a>
+                    <Card key={epic.label}>
+                      <CardHeader>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <CardTitle className="text-base flex items-center gap-2">
+                              <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                                {epic.label}
+                              </span>
+                              <span>{epic.title}</span>
+                            </CardTitle>
+                            {epic.description && (
+                              <CardDescription className="mt-1">{epic.description}</CardDescription>
                             )}
-                            <span className={cn("uppercase tracking-wide text-[10px]", STATUS_BADGE[item.status])}>{item.status.replace("_", " ")}</span>
                           </div>
+                          <a
+                            href={epic.html_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1 shrink-0"
+                          >
+                            GitHub <ExternalLink className="h-3 w-3" />
+                          </a>
                         </div>
-                        <div className="text-sm">{item.title}</div>
-                        {action && (
-                          <Link href={`/actions/${action.action_name}`} className="text-xs text-primary hover:underline">
-                            {action.display_name} →
-                          </Link>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex items-center justify-between text-xs mb-1.5">
+                          <span className="text-muted-foreground tabular-nums">
+                            {epic.closed} closed / {epic.total} total
+                          </span>
+                          <span className="tabular-nums font-medium">{epicPct}%</span>
+                        </div>
+                        <Progress value={epicPct} className="h-1.5" />
+                        {epic.issues.length > 0 && (
+                          <ul className="mt-4 space-y-1.5">
+                            {epic.issues.slice(0, 6).map((iss) => (
+                              <li key={`${iss.repo}#${iss.number}`} className="text-sm flex items-baseline gap-2">
+                                <span
+                                  className={`inline-block h-1.5 w-1.5 rounded-full shrink-0 ${
+                                    iss.state === "closed" ? "bg-emerald-500" : "bg-amber-500"
+                                  }`}
+                                />
+                                <a
+                                  href={iss.html_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="hover:underline truncate"
+                                >
+                                  {iss.title}
+                                </a>
+                                <span className="text-[10px] text-muted-foreground font-mono shrink-0">
+                                  {shortRepo(iss.repo)}#{iss.number}
+                                </span>
+                              </li>
+                            ))}
+                            {epic.issues.length > 6 && (
+                              <li className="text-xs text-muted-foreground">
+                                + {epic.issues.length - 6} more
+                              </li>
+                            )}
+                          </ul>
                         )}
-                      </div>
-                    </li>
+                      </CardContent>
+                    </Card>
                   );
                 })}
-              </ul>
+              </div>
+            </section>
+          )}
+
+          <section>
+            <h2 className="text-lg font-semibold mb-3">Milestones</h2>
+            {milestones.length === 0 ? (
+              <Card>
+                <CardContent className="pt-6 text-sm text-muted-foreground">
+                  No milestones found across the content repos.
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-3">
+                {milestones.map((m) => {
+                  const total = m.open_issues + m.closed_issues;
+                  const mPct = pct(m.closed_issues, total);
+                  return (
+                    <Card key={`${m.repo}#${m.number}`}>
+                      <CardHeader className="pb-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <CardTitle className="text-base flex items-center gap-2">
+                              <MilestoneIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+                              <span className="truncate">{m.title}</span>
+                              {m.state === "closed" && (
+                                <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500">
+                                  closed
+                                </span>
+                              )}
+                            </CardTitle>
+                            <div className="text-xs text-muted-foreground mt-1 font-mono">
+                              {shortRepo(m.repo)}
+                              {m.due_on && ` · due ${new Date(m.due_on).toLocaleDateString()}`}
+                            </div>
+                            {m.description && (
+                              <CardDescription className="mt-2">{m.description}</CardDescription>
+                            )}
+                          </div>
+                          <a
+                            href={m.html_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1 shrink-0"
+                          >
+                            GitHub <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex items-center justify-between text-xs mb-1.5">
+                          <span className="text-muted-foreground tabular-nums">
+                            {m.closed_issues} closed · {m.open_issues} open
+                          </span>
+                          <span className="tabular-nums font-medium">{mPct}%</span>
+                        </div>
+                        <Progress value={mPct} className="h-1.5" />
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          {data.errors.length > 0 && (
+            <div className="mt-6 text-xs text-muted-foreground">
+              <span className="font-medium">Partial errors:</span> {data.errors.join("; ")}
             </div>
-          );
-        })}
-      </div>
+          )}
+        </>
+      )}
     </Layout>
   );
 }
