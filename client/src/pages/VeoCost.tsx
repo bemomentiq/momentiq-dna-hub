@@ -4,6 +4,7 @@ import { Skeleton, EmptyState, ErrorState } from "@/components/states";
 import { DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUrlState } from "@/hooks/useUrlState";
+import { DataTable, type Column } from "@/components/data-table";
 
 type VeoCallSummary = {
   theme: string;
@@ -29,6 +30,50 @@ function fmtUsd(n: number | null | undefined): string {
   return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+const columns: Column<VeoCallSummary>[] = [
+  {
+    key: "theme",
+    header: "Theme",
+    accessor: (r) => r.theme,
+    render: (r) => <span className="font-medium">{r.theme}</span>,
+  },
+  {
+    key: "calls",
+    header: "Calls",
+    accessor: (r) => r.calls,
+    align: "right",
+    render: (r) => <span className="tabular-nums">{r.calls.toLocaleString()}</span>,
+  },
+  {
+    key: "total_cost_usd",
+    header: "Total cost",
+    accessor: (r) => r.total_cost_usd,
+    align: "right",
+    render: (r) => <span className="tabular-nums">{fmtUsd(r.total_cost_usd)}</span>,
+  },
+  {
+    key: "avg_cost_per_video",
+    header: "Avg cost / video",
+    accessor: (r) => r.avg_cost_per_video,
+    align: "right",
+    render: (r) => <span className="tabular-nums">{fmtUsd(r.avg_cost_per_video)}</span>,
+  },
+  {
+    key: "winning_videos",
+    header: "Winning videos",
+    accessor: (r) => r.winning_videos,
+    align: "right",
+    render: (r) => <span className="tabular-nums">{r.winning_videos.toLocaleString()}</span>,
+  },
+  {
+    key: "cost_per_winner",
+    header: "Cost / winner",
+    accessor: (r) => r.cost_per_winner,
+    align: "right",
+    render: (r) => <span className="tabular-nums">{fmtUsd(r.cost_per_winner)}</span>,
+  },
+];
+
 export default function VeoCost() {
   const [windowStr, setWindowStr] = useUrlState<"7" | "14" | "30">("window", "7");
   const windowDays = Number(windowStr) as 7 | 14 | 30;
@@ -42,7 +87,7 @@ export default function VeoCost() {
     },
   });
 
-  const rows = (data?.summary ?? []).slice().sort((a, b) => b.total_cost_usd - a.total_cost_usd);
+  const rows = data?.summary ?? [];
 
   return (
     <Layout
@@ -111,43 +156,15 @@ export default function VeoCost() {
             </>
           }
         />
-      ) : rows.length === 0 ? (
-        <div className="rounded-lg border border-card-border bg-card p-8 text-center text-sm text-muted-foreground">
-          No Veo calls in the last {data.window_days} days.
-        </div>
       ) : (
-        <div className="rounded-lg border border-card-border bg-card overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
-                <tr>
-                  <th className="text-left px-4 py-2.5 font-medium">Theme</th>
-                  <th className="text-right px-4 py-2.5 font-medium">Calls</th>
-                  <th className="text-right px-4 py-2.5 font-medium">Total cost</th>
-                  <th className="text-right px-4 py-2.5 font-medium">Avg cost / video</th>
-                  <th className="text-right px-4 py-2.5 font-medium">Winning videos</th>
-                  <th className="text-right px-4 py-2.5 font-medium">Cost / winner</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr
-                    key={row.theme}
-                    className="border-t border-card-border hover:bg-muted/20"
-                    data-testid={`veo-row-${row.theme}`}
-                  >
-                    <td className="px-4 py-2.5 font-medium">{row.theme}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums">{row.calls.toLocaleString()}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums">{fmtUsd(row.total_cost_usd)}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums">{fmtUsd(row.avg_cost_per_video)}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums">{row.winning_videos.toLocaleString()}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums">{fmtUsd(row.cost_per_winner)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <DataTable
+          rows={rows}
+          columns={columns}
+          rowKey={(r) => r.theme}
+          defaultSort={{ key: "total_cost_usd", dir: "desc" }}
+          csvFilename="veo-cost"
+          emptyMessage={`No Veo calls in the last ${data.window_days} days.`}
+        />
       )}
     </Layout>
   );

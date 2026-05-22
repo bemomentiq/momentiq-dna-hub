@@ -5,6 +5,7 @@ import { Skeleton, EmptyState, ErrorState } from "@/components/states";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { DataTable, type Column } from "@/components/data-table";
 
 // Mirrors server/clients/dna.ts AbRun shape — values from upstream may be null
 // (run still in progress or cost not yet attributed) so columns render "—".
@@ -64,6 +65,101 @@ function fmtDate(v: string | null): string {
   return Number.isNaN(d.getTime()) ? v : d.toISOString().slice(0, 10);
 }
 
+const columns: Column<AbRun>[] = [
+  {
+    key: "run_id",
+    header: "Run",
+    accessor: (r) => r.run_id,
+    render: (r) => <span className="font-mono text-[11px]">{r.run_id}</span>,
+  },
+  {
+    key: "theme",
+    header: "Theme",
+    accessor: (r) => r.theme,
+  },
+  {
+    key: "status",
+    header: "Status",
+    accessor: (r) => r.status,
+    render: (r) => {
+      const passes = passesPromotionGate(r);
+      return (
+        <div className="flex items-center gap-1.5">
+          <span className={cn("text-[11px] px-1.5 py-0.5 rounded", STATUS_BADGE[r.status])}>
+            {r.status}
+          </span>
+          {passes && (
+            <span
+              className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+              title="Passes promotion gate (IDS ≥ 0.85 AND Δ ≥ 0.10)"
+              data-testid={`badge-gate-${r.run_id}`}
+            >
+              <CheckCircle2 className="h-3 w-3" /> gate
+            </span>
+          )}
+        </div>
+      );
+    },
+  },
+  {
+    key: "videos",
+    header: "Videos",
+    accessor: (r) => r.videos_scored,
+    align: "right",
+    render: (r) => (
+      <span className="tabular-nums text-xs">
+        {r.videos_scored}/{r.videos_budget}
+      </span>
+    ),
+  },
+  {
+    key: "ids_mean",
+    header: "IDS mean",
+    accessor: (r) => r.ids_mean,
+    align: "right",
+    render: (r) => <span className="tabular-nums text-xs">{fmtNum(r.ids_mean)}</span>,
+  },
+  {
+    key: "delta_vs_control",
+    header: "Δ vs ctrl",
+    accessor: (r) => r.delta_vs_control,
+    align: "right",
+    render: (r) => (
+      <span
+        className={cn(
+          "tabular-nums text-xs",
+          r.delta_vs_control != null && r.delta_vs_control >= 0.1 && "text-emerald-700 dark:text-emerald-400",
+          r.delta_vs_control != null && r.delta_vs_control < 0 && "text-rose-700 dark:text-rose-400"
+        )}
+      >
+        {r.delta_vs_control == null
+          ? "—"
+          : (r.delta_vs_control >= 0 ? "+" : "") + r.delta_vs_control.toFixed(2)}
+      </span>
+    ),
+  },
+  {
+    key: "veo_cost_usd",
+    header: "Veo cost",
+    accessor: (r) => r.veo_cost_usd,
+    align: "right",
+    render: (r) => <span className="tabular-nums text-xs">{fmtUsd(r.veo_cost_usd)}</span>,
+  },
+  {
+    key: "roi_usd",
+    header: "ROI",
+    accessor: (r) => r.roi_usd,
+    align: "right",
+    render: (r) => <span className="tabular-nums text-xs">{fmtUsd(r.roi_usd)}</span>,
+  },
+  {
+    key: "started_at",
+    header: "Started",
+    accessor: (r) => r.started_at,
+    render: (r) => <span className="text-xs text-muted-foreground">{fmtDate(r.started_at)}</span>,
+  },
+];
+
 export default function AbRuns() {
   const [status, setStatus] = useUrlState<StatusFilter>("status", "running");
   const { data, isLoading, isError, error, refetch } = useQuery<AbRunsResponse>({
@@ -114,80 +210,14 @@ export default function AbRuns() {
               )}
             </h2>
           </div>
-          <div className="rounded-lg border border-card-border bg-card overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/30 text-xs uppercase text-muted-foreground tracking-wide">
-                <tr>
-                  <th className="text-left px-4 py-2.5">Run</th>
-                  <th className="text-left px-4 py-2.5">Theme</th>
-                  <th className="text-left px-4 py-2.5">Status</th>
-                  <th className="text-right px-4 py-2.5">Videos</th>
-                  <th className="text-right px-4 py-2.5">IDS mean</th>
-                  <th className="text-right px-4 py-2.5">Δ vs ctrl</th>
-                  <th className="text-right px-4 py-2.5">Veo cost</th>
-                  <th className="text-right px-4 py-2.5">ROI</th>
-                  <th className="text-left px-4 py-2.5">Started</th>
-                </tr>
-              </thead>
-              <tbody>
-                {runs.map((r) => {
-                  const passes = passesPromotionGate(r);
-                  return (
-                    <tr
-                      key={r.run_id}
-                      className={cn(
-                        "border-t border-card-border hover:bg-accent/30",
-                        passes && "bg-emerald-500/5"
-                      )}
-                      data-testid={`row-run-${r.run_id}`}
-                    >
-                      <td className="px-4 py-2.5 font-mono text-[11px]">{r.run_id}</td>
-                      <td className="px-4 py-2.5">{r.theme}</td>
-                      <td className="px-4 py-2.5">
-                        <div className="flex items-center gap-1.5">
-                          <span className={cn("text-[11px] px-1.5 py-0.5 rounded", STATUS_BADGE[r.status])}>
-                            {r.status}
-                          </span>
-                          {passes && (
-                            <span
-                              className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
-                              title="Passes promotion gate (IDS ≥ 0.85 AND Δ ≥ 0.10)"
-                              data-testid={`badge-gate-${r.run_id}`}
-                            >
-                              <CheckCircle2 className="h-3 w-3" /> gate
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-2.5 text-right tabular-nums text-xs">
-                        {r.videos_scored}/{r.videos_budget}
-                      </td>
-                      <td className="px-4 py-2.5 text-right tabular-nums text-xs">{fmtNum(r.ids_mean)}</td>
-                      <td
-                        className={cn(
-                          "px-4 py-2.5 text-right tabular-nums text-xs",
-                          r.delta_vs_control != null && r.delta_vs_control >= 0.1 && "text-emerald-700 dark:text-emerald-400",
-                          r.delta_vs_control != null && r.delta_vs_control < 0 && "text-rose-700 dark:text-rose-400"
-                        )}
-                      >
-                        {r.delta_vs_control == null ? "—" : (r.delta_vs_control >= 0 ? "+" : "") + r.delta_vs_control.toFixed(2)}
-                      </td>
-                      <td className="px-4 py-2.5 text-right tabular-nums text-xs">{fmtUsd(r.veo_cost_usd)}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums text-xs">{fmtUsd(r.roi_usd)}</td>
-                      <td className="px-4 py-2.5 text-xs text-muted-foreground">{fmtDate(r.started_at)}</td>
-                    </tr>
-                  );
-                })}
-                {runs.length === 0 && !isLoading && (
-                  <tr>
-                    <td colSpan={9} className="px-4 py-8 text-center text-muted-foreground text-xs">
-                      No {status} A/B runs.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            rows={runs}
+            columns={columns}
+            rowKey={(r) => r.run_id}
+            defaultSort={{ key: "started_at", dir: "desc" }}
+            csvFilename="ab-runs"
+            emptyMessage={`No ${status} A/B runs.`}
+          />
         </section>
       )}
     </Layout>
