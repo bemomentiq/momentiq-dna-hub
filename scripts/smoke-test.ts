@@ -70,6 +70,21 @@ const checks: Check[] = [
     expectStatus: [200, 404, 502],
   },
   {
+    name: "content-platform/bandit/state",
+    path: "/api/content-platform/bandit/state",
+    expectStatus: [200, 404, 502],
+  },
+  {
+    name: "content-platform/bandit/learning-metrics",
+    path: "/api/content-platform/bandit/learning-metrics",
+    expectStatus: [200, 404, 502],
+  },
+  {
+    name: "content-platform/bandit/regret",
+    path: "/api/content-platform/bandit/regret?window_days=30",
+    expectStatus: [200, 404, 502],
+  },
+  {
     name: "content-platform/cache",
     path: "/api/content-platform/cache",
     shape: (b: any) =>
