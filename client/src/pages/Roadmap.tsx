@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
+import { Skeleton } from "@/components/states";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { ExternalLink, AlertTriangle, Milestone as MilestoneIcon } from "lucide-react";
@@ -89,9 +90,7 @@ export default function Roadmap() {
         </Card>
       )}
 
-      {isLoading && (
-        <div className="text-sm text-muted-foreground">Loading milestones…</div>
-      )}
+      {isLoading && <Skeleton lines={6} />}
 
       {data && (
         <>

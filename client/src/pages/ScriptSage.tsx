@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
+import { Skeleton, EmptyState, ErrorState } from "@/components/states";
 import { cn } from "@/lib/utils";
 import { Workflow, AlertCircle } from "lucide-react";
 
@@ -64,7 +65,7 @@ export default function ScriptSage() {
         title="ScriptSage Throughput"
         subtitle="Live throughput, fallback/error rates, status-sync lag, and background-job health for the scriptsage-backend service."
       >
-        <div className="text-sm text-muted-foreground">Loading…</div>
+        <Skeleton lines={6} />
       </Layout>
     );
   }
@@ -78,18 +79,11 @@ export default function ScriptSage() {
         title="ScriptSage Throughput"
         subtitle="Live throughput, fallback/error rates, status-sync lag, and background-job health for the scriptsage-backend service."
       >
-        <div className="rounded-lg border border-destructive/40 bg-card p-8 text-center">
-          <h3 className="font-semibold text-sm mb-1">Failed to load ScriptSage status</h3>
-          <p className="text-xs text-muted-foreground mb-3">
-            {error instanceof Error ? error.message : "The /api/content-platform/scriptsage request failed."}
-          </p>
-          <button
-            onClick={() => refetch()}
-            className="text-xs px-3 py-1.5 rounded border border-card-border hover:bg-muted"
-          >
-            Retry
-          </button>
-        </div>
+        <ErrorState
+          title="Failed to load ScriptSage status"
+          error={error ?? new Error("The /api/content-platform/scriptsage request failed.")}
+          onRetry={() => refetch()}
+        />
       </Layout>
     );
   }
@@ -104,7 +98,15 @@ export default function ScriptSage() {
       subtitle="Live throughput, fallback/error rates, status-sync lag, and background-job health for the scriptsage-backend service."
     >
       {!configured ? (
-        <EmptyState />
+        <EmptyState
+          title="ScriptSage not configured"
+          description={
+            <>
+              Set <code className="font-mono">SCRIPTSAGE_API_BASE</code> (and optionally{" "}
+              <code className="font-mono">SCRIPTSAGE_API_TOKEN</code>) to populate this section.
+            </>
+          }
+        />
       ) : (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
@@ -192,19 +194,6 @@ export default function ScriptSage() {
         </>
       )}
     </Layout>
-  );
-}
-
-function EmptyState() {
-  return (
-    <div className="rounded-lg border border-card-border bg-card p-10 text-center">
-      <Workflow className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-      <div className="text-sm font-medium mb-1">ScriptSage not configured</div>
-      <div className="text-xs text-muted-foreground max-w-md mx-auto">
-        Set <code className="font-mono">SCRIPTSAGE_API_BASE</code> (and optionally{" "}
-        <code className="font-mono">SCRIPTSAGE_API_TOKEN</code>) to surface throughput stats and job health here.
-      </div>
-    </div>
   );
 }
 
