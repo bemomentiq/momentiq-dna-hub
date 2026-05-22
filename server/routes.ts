@@ -469,9 +469,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // total decisions, and exploration ratio. Returns dna_configured=false envelope
   // when DNA_API_BASE is unset so the UI can render an empty-state.
   app.get("/api/content-platform/bandit/state", async (_req, res) => {
+    const configured = dnaClient.configured();
     const state = await dnaClient.bandit.state();
+    if (configured && state === null) {
+      return void res.status(502).json({
+        dna_configured: true,
+        upstream_error: true,
+        arms: [],
+        total_decisions: 0,
+        exploration_ratio: null,
+        computed_at: null,
+        fetched_at: new Date().toISOString(),
+      });
+    }
     res.json({
-      dna_configured: dnaClient.configured(),
+      dna_configured: configured,
+      upstream_error: false,
       arms: state?.arms ?? [],
       total_decisions: state?.total_decisions ?? 0,
       exploration_ratio: state?.exploration_ratio ?? null,
@@ -499,9 +512,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/content-platform/bandit/regret", async (req, res) => {
     const raw = parseInt(String(req.query.window_days ?? "30"), 10);
     const windowDays = [7, 14, 30].includes(raw) ? raw : 30;
+    const configured = dnaClient.configured();
     const data = await dnaClient.bandit.regret(windowDays);
+    if (configured && data === null) {
+      return void res.status(502).json({
+        dna_configured: true,
+        upstream_error: true,
+        points: [],
+        window_days: windowDays,
+        fetched_at: new Date().toISOString(),
+      });
+    }
     res.json({
-      dna_configured: dnaClient.configured(),
+      dna_configured: configured,
+      upstream_error: false,
       points: data?.points ?? [],
       window_days: windowDays,
       fetched_at: new Date().toISOString(),
