@@ -361,9 +361,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // ScriptSage generation failures — proxies upstream monitoring endpoint.
   app.get("/api/content-platform/scriptsage/failures", async (_req, res) => {
+    const configured = scriptsageClient.configured();
     const data = await scriptsageClient.failures();
+    if (configured && data === null) {
+      return void res.status(502).json({
+        scriptsage_configured: true,
+        upstream_error: true,
+        failures: [],
+        fetched_at: new Date().toISOString(),
+      });
+    }
     res.json({
-      scriptsage_configured: scriptsageClient.configured(),
+      scriptsage_configured: configured,
+      upstream_error: false,
       failures: data?.failures ?? [],
       fetched_at: new Date().toISOString(),
     });
@@ -373,9 +383,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/content-platform/scriptsage/errors", async (req, res) => {
     const raw = parseInt(String(req.query.window_days ?? "7"), 10);
     const windowDays = [7, 14, 30].includes(raw) ? raw : 7;
+    const configured = scriptsageClient.configured();
     const data = await scriptsageClient.errors(windowDays);
+    if (configured && data === null) {
+      return void res.status(502).json({
+        scriptsage_configured: true,
+        upstream_error: true,
+        signatures: [],
+        window_days: windowDays,
+        fetched_at: new Date().toISOString(),
+      });
+    }
     res.json({
-      scriptsage_configured: scriptsageClient.configured(),
+      scriptsage_configured: configured,
+      upstream_error: false,
       signatures: data?.signatures ?? [],
       window_days: windowDays,
       fetched_at: new Date().toISOString(),
@@ -396,9 +417,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/content-platform/scriptsage/funnel", async (req, res) => {
     const raw = parseInt(String(req.query.window_days ?? "7"), 10);
     const windowDays = [7, 14, 30].includes(raw) ? raw : 7;
+    const configured = scriptsageClient.configured();
     const data = await scriptsageClient.funnels(windowDays);
+    if (configured && data === null) {
+      return void res.status(502).json({
+        scriptsage_configured: true,
+        upstream_error: true,
+        funnels: [],
+        window_days: windowDays,
+        fetched_at: new Date().toISOString(),
+      });
+    }
     res.json({
-      scriptsage_configured: scriptsageClient.configured(),
+      scriptsage_configured: configured,
+      upstream_error: false,
       funnels: data?.funnels ?? [],
       window_days: windowDays,
       fetched_at: new Date().toISOString(),
