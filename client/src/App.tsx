@@ -1,4 +1,4 @@
-import { Switch, Route, Router } from "wouter";
+import { Switch, Route, Router, Redirect } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -6,19 +6,12 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Overview from "@/pages/Overview";
-import AllActions from "@/pages/AllActions";
-import ActionDetail from "@/pages/ActionDetail";
 import Roadmap from "@/pages/Roadmap";
-import TrainingWorkbench from "@/pages/TrainingWorkbench";
 import AbRuns from "@/pages/AbRuns";
 import ScriptSage from "@/pages/ScriptSage";
-import Evals from "@/pages/Evals";
 import Issues from "@/pages/Issues";
 import ExecutiveBrief from "@/pages/ExecutiveBrief";
-import MoneyPath from "@/pages/MoneyPath";
 import VeoCost from "@/pages/VeoCost";
-import HitlBurden from "@/pages/HitlBurden";
-import DataPipeline from "@/pages/DataPipeline";
 import Subscriptions from "@/pages/Subscriptions";
 import Explorer from "@/pages/Explorer";
 import Backlog from "@/pages/Backlog";
@@ -40,21 +33,22 @@ function AppRouter() {
       <Route path="/fleet" component={Fleet} />
       <Route path="/autonomy" component={Autonomy} />
       <Route path="/themes" component={Themes} />
-      <Route path="/actions" component={AllActions} />
-      <Route path="/actions/:name" component={ActionDetail} />
       <Route path="/themes/:slug" component={ThemeDetail} />
-      <Route path="/roadmap" component={Roadmap} />
-      <Route path="/training" component={TrainingWorkbench} />
-      <Route path="/scriptsage" component={ScriptSage} />
-      <Route path="/pipeline" component={DataPipeline} />
       <Route path="/ab-runs" component={AbRuns} />
-      <Route path="/subscriptions" component={Subscriptions} />
-      <Route path="/evals" component={Evals} />
       <Route path="/scoring" component={Scoring} />
-      <Route path="/hitl" component={HitlBurden} />
-      <Route path="/money-path" component={MoneyPath} />
+      <Route path="/scriptsage" component={ScriptSage} />
       <Route path="/veo-cost" component={VeoCost} />
+      <Route path="/subscriptions" component={Subscriptions} />
+      <Route path="/roadmap" component={Roadmap} />
       <Route path="/issues" component={Issues} />
+      {/* SID-era routes — redirect to home so old bookmarks don't 404. */}
+      <Route path="/actions"><Redirect to="/themes" /></Route>
+      <Route path="/actions/:name"><Redirect to="/themes" /></Route>
+      <Route path="/training"><Redirect to="/scriptsage" /></Route>
+      <Route path="/pipeline"><Redirect to="/subscriptions" /></Route>
+      <Route path="/evals"><Redirect to="/ab-runs" /></Route>
+      <Route path="/hitl"><Redirect to="/scoring" /></Route>
+      <Route path="/money-path"><Redirect to="/veo-cost" /></Route>
       <Route component={NotFound} />
     </Switch>
   );
