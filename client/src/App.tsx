@@ -11,17 +11,22 @@ import ActionDetail from "@/pages/ActionDetail";
 import Roadmap from "@/pages/Roadmap";
 import TrainingWorkbench from "@/pages/TrainingWorkbench";
 import AbRuns from "@/pages/AbRuns";
+import ScriptSage from "@/pages/ScriptSage";
+import Evals from "@/pages/Evals";
 import Issues from "@/pages/Issues";
 import ExecutiveBrief from "@/pages/ExecutiveBrief";
 import MoneyPath from "@/pages/MoneyPath";
+import VeoCost from "@/pages/VeoCost";
 import HitlBurden from "@/pages/HitlBurden";
 import DataPipeline from "@/pages/DataPipeline";
+import Subscriptions from "@/pages/Subscriptions";
 import Explorer from "@/pages/Explorer";
 import Backlog from "@/pages/Backlog";
 import Run from "@/pages/Run";
 import Fleet from "@/pages/Fleet";
 import Autonomy from "@/pages/Autonomy";
 import Themes from "@/pages/Themes";
+import ThemeDetail from "@/pages/ThemeDetail";
 
 function AppRouter() {
   return (
@@ -36,12 +41,17 @@ function AppRouter() {
       <Route path="/themes" component={Themes} />
       <Route path="/actions" component={AllActions} />
       <Route path="/actions/:name" component={ActionDetail} />
+      <Route path="/themes/:slug" component={ThemeDetail} />
       <Route path="/roadmap" component={Roadmap} />
       <Route path="/training" component={TrainingWorkbench} />
+      <Route path="/scriptsage" component={ScriptSage} />
       <Route path="/pipeline" component={DataPipeline} />
       <Route path="/ab-runs" component={AbRuns} />
+      <Route path="/subscriptions" component={Subscriptions} />
+      <Route path="/evals" component={Evals} />
       <Route path="/hitl" component={HitlBurden} />
       <Route path="/money-path" component={MoneyPath} />
+      <Route path="/veo-cost" component={VeoCost} />
       <Route path="/issues" component={Issues} />
       <Route component={NotFound} />
     </Switch>
