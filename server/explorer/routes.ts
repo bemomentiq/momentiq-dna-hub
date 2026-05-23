@@ -5,6 +5,7 @@ import { buildExplorerPrompt, buildDispatchPayload } from "./prompt";
 import type { DraftTask } from "@shared/schema";
 import { createSoloIssueForTask, createIssueForTask, createBatchedFleetTracker, groupDrafts, composeMergedTask, inferArea, pickRepoForTask } from "./github-sync";
 import { dispatchWithCascade } from "./cascade-dispatch";
+import { DNA_FOCUS_AREAS, FOCUS_AREA_IDS } from "@shared/dna-focus-areas";
 
 // Build a Fleet-style agentBriefing for the Explorer run.
 // Wraps the Opus prompt as an 8-H2 compliant task that a Codex or Claude lane
@@ -78,6 +79,16 @@ const ingestSchema = z.object({
     body: z.string().max(2000),
     action_name: z.string().optional().nullable(),
     phase_id: z.string().optional().nullable(),
+    // DNA roadmap focus_area — optional in Zod so older Explorer dispatches don't
+    // 400, but enforced at the prompt level. Findings without it surface as
+    // (uncategorized) in the UI.
+    focus_area: z
+      .string()
+      .refine((v) => (FOCUS_AREA_IDS as readonly string[]).includes(v), {
+        message: `focus_area must be one of: ${FOCUS_AREA_IDS.join(", ")}`,
+      })
+      .optional()
+      .nullable(),
     evidence: z.array(z.string()).optional().default([]),
   })).max(20),
   ledger_patterns: z.array(z.object({
@@ -250,6 +261,7 @@ export function registerExplorerRoutes(app: Express) {
         run_id: id, created_at: now, severity: f.severity, category: f.category,
         title: f.title, body: f.body,
         action_name: f.action_name ?? null, phase_id: f.phase_id ?? null,
+        focus_area: f.focus_area ?? null,
         evidence_json: JSON.stringify(f.evidence ?? []),
         status: "open",
       });
@@ -374,7 +386,28 @@ export function registerExplorerRoutes(app: Express) {
   app.get("/api/findings", (req, res) => {
     const status = (req.query.status as string) || undefined;
     const action_name = (req.query.action_name as string) || undefined;
-    res.json(storage.listFindings({ status, action_name, limit: 200 }));
+    // focus_area filter: a focus_area id, or the literal string "uncategorized"
+    // to fetch legacy/unlabelled findings.
+    const focusParam = req.query.focus_area as string | undefined;
+    let focus_area: string | null | undefined;
+    if (focusParam === "uncategorized") focus_area = null;
+    else if (focusParam) focus_area = focusParam;
+    else focus_area = undefined;
+    res.json(storage.listFindings({ status, action_name, focus_area, limit: 200 }));
+  });
+
+  // DNA-8: focus-area registry + counts in the last 7 days for the Explorer rail.
+  app.get("/api/findings/focus-areas", (_req, res) => {
+    const counts = storage.focusAreaCounts(7);
+    const byId = new Map(counts.map((c) => [c.focus_area, c.count] as const));
+    const areas = DNA_FOCUS_AREAS.map((a) => ({
+      id: a.id,
+      label: a.label,
+      description: a.description,
+      count_7d: byId.get(a.id) ?? 0,
+    }));
+    const uncategorized_count_7d = byId.get(null) ?? 0;
+    res.json({ areas, uncategorized_count_7d });
   });
   app.patch("/api/findings/:id", (req, res) => {
     const id = parseInt(req.params.id, 10);

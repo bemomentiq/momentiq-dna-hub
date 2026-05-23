@@ -48,6 +48,9 @@ export const explorerFindings = sqliteTable("explorer_findings", {
   // Optional refs — join targets for the UI
   action_name: text("action_name"), // matches ACTIONS[].action_name
   phase_id: text("phase_id"), // e.g. 'phase-c'
+  // DNA roadmap focus area — one of the 15 ids in shared/dna-focus-areas.ts.
+  // Nullable so legacy rows surface as "(uncategorized)" in the UI.
+  focus_area: text("focus_area"),
   // Evidence: GitHub issue / PR numbers, file paths, commit SHAs
   evidence_json: text("evidence_json").notNull().default("[]"),
   // Dismissed / accepted by user

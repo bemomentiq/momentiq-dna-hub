@@ -1,11 +1,21 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import type { ExplorerRun, ExplorerFinding, LedgerEntry, ExplorerStats, ExplorerHealth, CronConfig } from "@/lib/types";
-import { useState } from "react";
-import { Brain, Flame, Sparkles, Play, Settings, AlertCircle, CheckCircle2, XCircle, Clock, Pause, Zap, Rocket, ChevronDown, Github, KeyRound, Hash, Layers, RotateCw } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Brain, Flame, Sparkles, Play, Settings, AlertCircle, CheckCircle2, XCircle, Clock, Pause, Zap, Rocket, ChevronDown, Github, KeyRound, Hash, Layers, RotateCw, Compass } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiRequest, queryClient as qc } from "@/lib/queryClient";
 import { toast } from "@/hooks/use-toast";
+import { getFocusAreaLabel, UNCATEGORIZED_FOCUS_AREA } from "@shared/dna-focus-areas";
+
+type FocusAreaSummary = {
+  areas: { id: string; label: string; description: string; count_7d: number }[];
+  uncategorized_count_7d: number;
+};
+
+// Sentinel used for the "(uncategorized)" rail chip. Backend `/api/findings`
+// treats this same string as a filter targeting NULL focus_area rows.
+const UNCATEGORIZED_FILTER = "uncategorized";
 
 const SEVERITY_BADGE = {
   low: "bg-sky-500/15 text-sky-700 dark:text-sky-400 border-sky-500/30",
@@ -43,7 +53,13 @@ export default function Explorer() {
   }>({ queryKey: ["/api/explorer/stats/v2"], refetchInterval: 5000 });
   const { data: health } = useQuery<ExplorerHealth>({ queryKey: ["/api/explorer/health"], refetchInterval: 5000 });
   const { data: cfg } = useQuery<CronConfig>({ queryKey: ["/api/cron-config"] });
+  const { data: focusSummary } = useQuery<FocusAreaSummary>({
+    queryKey: ["/api/findings/focus-areas"],
+    refetchInterval: 30_000,
+  });
   const [showSettings, setShowSettings] = useState(false);
+  // null = all focus areas; UNCATEGORIZED_FILTER = legacy/unlabelled rows
+  const [focusFilter, setFocusFilter] = useState<string | null>(null);
 
   const triggerRun = useMutation({
     mutationFn: async () => {
@@ -289,20 +305,147 @@ export default function Explorer() {
         )}
       </section>
 
-      {/* Findings */}
-      <section className="mt-8">
-        <h2 className="text-base font-semibold mb-3 flex items-center gap-2"><AlertCircle className="h-4 w-4 text-muted-foreground" /> Findings</h2>
-        {findings.length === 0 ? (
-          <div className="rounded-lg border border-card-border bg-card p-6 text-center text-sm text-muted-foreground italic">No findings yet.</div>
-        ) : (
-          <div className="space-y-2">
-            {findings.slice(0, 30).map((f) => (
-              <FindingRow key={f.id} f={f} />
-            ))}
-          </div>
-        )}
-      </section>
+      {/* Findings — DNA-8: anchored to roadmap-specialist FOCUS_AREAs */}
+      <FocusAreaFindings
+        findings={findings}
+        summary={focusSummary}
+        filter={focusFilter}
+        onFilter={setFocusFilter}
+      />
     </Layout>
+  );
+}
+
+function FocusAreaFindings({
+  findings,
+  summary,
+  filter,
+  onFilter,
+}: {
+  findings: ExplorerFinding[];
+  summary: FocusAreaSummary | undefined;
+  filter: string | null;
+  onFilter: (id: string | null) => void;
+}) {
+  // Local count of findings PER focus_area across the live findings payload —
+  // distinct from the 7d server-side count_7d shown in chip badges; both are
+  // useful (live = "what's open right now", 7d = "recent activity").
+  const liveCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    let uncategorized = 0;
+    for (const f of findings) {
+      if (!f.focus_area) {
+        uncategorized++;
+        continue;
+      }
+      m.set(f.focus_area, (m.get(f.focus_area) ?? 0) + 1);
+    }
+    return { byId: m, uncategorized };
+  }, [findings]);
+
+  const filtered = useMemo(() => {
+    if (filter === null) return findings;
+    if (filter === UNCATEGORIZED_FILTER) return findings.filter((f) => !f.focus_area);
+    return findings.filter((f) => f.focus_area === filter);
+  }, [findings, filter]);
+
+  const selectedLabel = filter === null
+    ? "All focus areas"
+    : filter === UNCATEGORIZED_FILTER
+      ? UNCATEGORIZED_FOCUS_AREA
+      : getFocusAreaLabel(filter);
+
+  return (
+    <section className="mt-8">
+      <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
+        <AlertCircle className="h-4 w-4 text-muted-foreground" />
+        Findings
+        <span className="text-xs text-muted-foreground font-normal">
+          · tagged by DNA roadmap focus_area · {filtered.length} of {findings.length} shown
+        </span>
+      </h2>
+      <div className="grid lg:grid-cols-[220px_1fr] gap-4">
+        {/* Left rail — focus_area filter chips with 7d count badges */}
+        <aside className="rounded-lg border border-card-border bg-card p-3 self-start lg:sticky lg:top-4 max-h-[80vh] overflow-y-auto">
+          <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1">
+            <Compass className="h-3 w-3" /> Focus areas
+          </div>
+          <button
+            onClick={() => onFilter(null)}
+            className={cn(
+              "w-full text-left text-xs px-2 py-1.5 rounded-md border mb-1 flex items-center justify-between",
+              filter === null
+                ? "bg-primary/15 border-primary/40 text-primary"
+                : "border-card-border hover:bg-accent",
+            )}
+          >
+            <span>All</span>
+            <span className="text-[10px] tabular-nums text-muted-foreground">{findings.length}</span>
+          </button>
+          {(summary?.areas ?? []).map((a) => {
+            const active = filter === a.id;
+            const live = liveCounts.byId.get(a.id) ?? 0;
+            return (
+              <button
+                key={a.id}
+                onClick={() => onFilter(a.id)}
+                title={a.description}
+                className={cn(
+                  "w-full text-left text-xs px-2 py-1.5 rounded-md border mb-1 flex items-center justify-between gap-2",
+                  active
+                    ? "bg-primary/15 border-primary/40 text-primary"
+                    : "border-card-border hover:bg-accent",
+                )}
+              >
+                <span className="truncate">{a.label}</span>
+                <span className="text-[10px] tabular-nums shrink-0">
+                  <span className={cn(live > 0 ? "" : "text-muted-foreground")}>{live}</span>
+                  <span className="text-muted-foreground"> / {a.count_7d}</span>
+                </span>
+              </button>
+            );
+          })}
+          <button
+            onClick={() => onFilter(UNCATEGORIZED_FILTER)}
+            className={cn(
+              "w-full text-left text-xs px-2 py-1.5 rounded-md border mt-2 flex items-center justify-between italic",
+              filter === UNCATEGORIZED_FILTER
+                ? "bg-primary/15 border-primary/40 text-primary"
+                : "border-card-border hover:bg-accent text-muted-foreground",
+            )}
+          >
+            <span>{UNCATEGORIZED_FOCUS_AREA}</span>
+            <span className="text-[10px] tabular-nums">
+              {liveCounts.uncategorized}
+              <span> / {summary?.uncategorized_count_7d ?? 0}</span>
+            </span>
+          </button>
+          <div className="mt-2 text-[10px] text-muted-foreground leading-snug">
+            badge: live / last&nbsp;7d
+          </div>
+        </aside>
+
+        {/* Center — findings list, filtered by selected focus_area */}
+        <div>
+          <div className="mb-2 text-xs text-muted-foreground">
+            Showing <span className="font-medium text-foreground">{selectedLabel}</span>
+          </div>
+          {filtered.length === 0 ? (
+            <div className="rounded-lg border border-card-border bg-card p-6 text-center text-sm text-muted-foreground italic">
+              {findings.length === 0
+                ? "No findings yet."
+                : "No findings in this focus area."}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {filtered.slice(0, 30).map((f) => (
+                <FindingRow key={f.id} f={f} />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -365,6 +508,17 @@ function FindingRow({ f }: { f: ExplorerFinding }) {
       <button onClick={() => setOpen(!open)} className="w-full flex items-start gap-3 p-3 text-left">
         <span className={cn("text-[10px] uppercase font-semibold tracking-wide px-1.5 py-0.5 rounded border shrink-0", SEVERITY_BADGE[f.severity])}>{f.severity}</span>
         <span className="text-[10px] uppercase text-muted-foreground shrink-0 mt-0.5">{f.category.replace("_", " ")}</span>
+        <span
+          className={cn(
+            "text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border shrink-0",
+            f.focus_area
+              ? "bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-500/30"
+              : "bg-muted text-muted-foreground border-card-border italic",
+          )}
+          title={f.focus_area ? `focus_area: ${f.focus_area}` : "no focus_area assigned"}
+        >
+          {f.focus_area ? getFocusAreaLabel(f.focus_area) : UNCATEGORIZED_FOCUS_AREA}
+        </span>
         <div className="flex-1 min-w-0">
           <div className="text-sm font-medium">{f.title}</div>
           {f.action_name && <div className="text-[11px] font-mono text-muted-foreground mt-0.5">→ {f.action_name}</div>}

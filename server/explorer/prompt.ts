@@ -2,6 +2,7 @@ import { storage } from "../storage";
 import { buildFluidLoopContext } from "./fluid-loop";
 import { fetchLiveSignals } from "./neon-signals";
 import { fetchKalodataSignals, getLatestReadinessContext, getLatestRoadmapContext } from "./kalodata-signals";
+import { DNA_FOCUS_AREAS, FOCUS_AREA_IDS } from "@shared/dna-focus-areas";
 
 // SID 40-action snapshot + LIVE_FEED removed during the content-platform redesign.
 // The Explorer now sources live context from /api/content-platform/* endpoints
@@ -56,6 +57,7 @@ Avoid context bloat:
 
 Quality bar per finding:
 - Has severity (low/medium/high/critical) + category ('gap_to_prod'|'training_data'|'eval'|'drift'|'optimization'|'architecture'|'risk'|'data_source'|'frontend'|'roadmap')
+- MUST include \`focus_area\` — one of the 15 DNA roadmap focus_area ids listed under "DNA FOCUS_AREAS" below. Findings without a focus_area surface as "(uncategorized)" in the Explorer UI and lose roadmap traction. Pick the BEST single match, not a near-match.
 - Cites at least one piece of evidence (GitHub #, file:line, commit SHA, merged PR number from last 72h, or SQL count from last 24h)
 - Maps to an action_name OR phase_id (sample / outreach / creator_match / paid_ads / live / reactivate / training / eval / data) when applicable
 - For data_source findings: name the source (Airtable base/table, Monday board, Drive folder), the field(s) of interest, the SID table/column it should land in, and what action it would train
@@ -86,7 +88,7 @@ OUTPUT FORMAT (STRICT JSON, no prose before/after):
   "summary": "<=600 char recap of this run",
   "next_gameplan": "<=400 char gameplan for next run — what to explore deeper next cycle",
   "next_pickup": "<=500 char chain handoff directive for the next Explorer run (see NEXT PICKUP DIRECTIVE above)",
-  "findings": [{"severity":"high","category":"gap_to_prod","title":"…","body":"…","action_name":"…","phase_id":"…","evidence":["#3474","server/dispatch/recovery/usage-cap-deferral-gate.ts:143"]}, ...],
+  "findings": [{"severity":"high","category":"gap_to_prod","focus_area":"control-panel","title":"…","body":"…","action_name":"…","phase_id":"…","evidence":["#3474","server/dispatch/recovery/usage-cap-deferral-gate.ts:143"]}, ...],
   "ledger_patterns": [{"pattern":"…","context":"…"}, ...],
   "draft_tasks": [{"title":"[AH-EXPLORE-1] …","description":"…","project_slug":"momentiq-dna","repo_url":"https://github.com/bemomentiq/momentiq-dna","priority":"p1","relevant_skills":["codex-fleet","mcc-roadmap-specialist-dna"],"effort_estimate":"4 hrs","agent_briefing":"## Goal\\n…\\n\\n## Context\\n…\\n\\n## Files\\n…\\n\\n## Implementation\\n…\\n\\n## Acceptance\\n…\\n\\n## Out-of-scope\\n…\\n\\n## Commit + PR\\n…\\n\\n## Notes\\n…","batch_id":"ah-explore-2026-04-30"}, ...]
 }
@@ -180,6 +182,10 @@ export async function buildExplorerPrompt(run_id: number): Promise<string> {
     // optional — never block on this
   }
 
+  const focusAreaSection = DNA_FOCUS_AREAS
+    .map((a) => `- \`${a.id}\` — ${a.label}: ${a.description}`)
+    .join("\n");
+
   return [
     ROLE,
     "",
@@ -188,6 +194,10 @@ export async function buildExplorerPrompt(run_id: number): Promise<string> {
     "",
     `## KALODATA COMPANION SIGNALS`,
     kalodataSection,
+    "",
+    `## DNA FOCUS_AREAS (REQUIRED on every finding — pick exactly one id)`,
+    focusAreaSection,
+    `Valid ids: ${FOCUS_AREA_IDS.join(", ")}`,
     "",
     `# RUN CONTEXT`,
     `run_id: ${run_id}`,

@@ -117,6 +117,9 @@ export type ExplorerFinding = {
   body: string;
   action_name: string | null;
   phase_id: string | null;
+  // DNA roadmap focus_area id (one of shared/dna-focus-areas.ts FOCUS_AREA_IDS).
+  // Null on legacy rows; surfaces as "(uncategorized)" in the Explorer rail.
+  focus_area: string | null;
   evidence_json: string;
   status: "open" | "accepted" | "dismissed" | "superseded";
 };
