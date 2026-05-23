@@ -124,15 +124,15 @@ export default function Run() {
               className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm font-mono"
             />
             <div className="text-[10px] text-muted-foreground mt-1">
-              Full repo context (recent merged PRs, open autonomy-hub issues), the relevant skills (codex-fleet, momentiq-shop-insights-dashboard-v2, sid-autonomy-actions-catalog), and the 8-H2 briefing template are auto-injected on top of your prompt.
+              Full repo context (recent merged PRs, open autonomy-hub issues), the relevant skills (codex-fleet, mcc-roadmap-specialist-dna), and the 8-H2 briefing template are auto-injected on top of your prompt.
             </div>
           </label>
           <div className="grid md:grid-cols-3 gap-3">
             <Field label="Target repo">
               <select value={repo} onChange={(e) => setRepo(e.target.value as any)} className="w-full px-2 py-1.5 rounded-md border border-input bg-background text-sm">
-                <option value="backend">backend (momentiq-shopinsights-backend)</option>
-                <option value="frontend">frontend (momentiq-shopinsights-frontend)</option>
-                <option value="hub">hub (autonomy-hub — self-improvement)</option>
+                <option value="backend">backend (momentiq-dna — Veo 3.1 + vidgen-engine)</option>
+                <option value="frontend">frontend (momentiq-scriptsage-frontend)</option>
+                <option value="hub">hub (momentiq-dna-hub — self-improvement)</option>
               </select>
             </Field>
             <Field label="Executor (pinned model)">
