@@ -1,9 +1,24 @@
 import "dotenv/config";
 import express, { Response, NextFunction } from 'express';
 import type { Request } from 'express';
+import { initSentry, installSentryErrorHandler, captureException } from "./sentry";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "node:http";
+
+// Boot GH PAT guard: in production, refuse to start without a token configured.
+// Dev mode still allows missing token (sections render empty-state).
+if (process.env.NODE_ENV === "production") {
+  const envPat = process.env.GH_PAT || process.env.GH_TOKEN || process.env.GITHUB_TOKEN || "";
+  if (!envPat) {
+    console.warn(
+      "[boot] WARNING: no GH_PAT/GH_TOKEN/GITHUB_TOKEN env var set — " +
+        "GitHub-backed routes will 400 until a token is configured via Settings → GitHub PAT.",
+    );
+  }
+}
+
+initSentry();
 
 const app = express();
 const httpServer = createServer(app);
@@ -64,11 +79,16 @@ app.use((req, res, next) => {
 (async () => {
   await registerRoutes(httpServer, app);
 
+  // Sentry's Express error handler must be installed before any other error
+  // middleware so uncaught exceptions get reported.
+  installSentryErrorHandler(app);
+
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
     console.error("Internal Server Error:", err);
+    captureException(err, { source: "express-error-middleware", status });
 
     if (res.headersSent) {
       return next(err);

@@ -304,8 +304,8 @@ function ensureSchema() {
     ).run("Drive momentiq-dna repo to production-readiness per companion site signals. Prioritize Code Completeness > Test Coverage > E2E Flows > Schema Integrity. Epic mode enabled.");
   }
   // Seed GitHub PAT from environment if not already set in DB.
-  // Set GH_TOKEN or GITHUB_TOKEN env var on Railway; configure via Settings → GitHub PAT at runtime.
-  const envPat = process.env.GH_TOKEN || process.env.GITHUB_TOKEN || "";
+  // Set GH_PAT / GH_TOKEN / GITHUB_TOKEN env var on Railway; configure via Settings → GitHub PAT at runtime.
+  const envPat = process.env.GH_PAT || process.env.GH_TOKEN || process.env.GITHUB_TOKEN || "";
   const tokenRow = sqlite.prepare("SELECT github_token FROM cron_config WHERE id=1").get() as any;
   if (!tokenRow?.github_token && envPat) {
     const last4 = envPat.slice(-4);

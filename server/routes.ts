@@ -14,12 +14,23 @@ import { dispatchConsolidationToCC } from "./explorer/consolidation";
 import { dispatchOrganizerToCC, computeExplorerPauseDecision, type OrganizerScope } from "./explorer/backlog-organizer";
 import { storage } from "./storage";
 import { buildDigestMarkdown } from "./digest";
+import { hubAuth } from "./middleware/auth";
+import { registerHealthRoutes } from "./health";
 import { dnaClient } from "./clients/dna";
 import { scriptsageClient } from "./clients/scriptsage";
 import { checkDnaHealth, checkScriptsageHealth, checkKalodataHealth } from "./clients/health";
 import { cacheStats, cacheBust } from "./clients/cache";
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+  // Health check first — must be reachable without auth so Railway / uptime
+  // monitors can probe it. registerHealthRoutes() mounts GET /api/health.
+  registerHealthRoutes(app);
+
+  // Auth gate on /api/* (skips /api/health and /api/pr-babysitter/webhook).
+  // Requires X-Hub-Token header matching HUB_TOKEN env. When HUB_TOKEN is unset
+  // (dev / first boot) the middleware logs once and passes through.
+  app.use(hubAuth());
+
   registerExplorerRoutes(app);
   registerFleetRoutes(app);
   registerPrBabysitterRoutes(app);
