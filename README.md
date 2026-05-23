@@ -95,7 +95,16 @@ each section renders an "(not configured)" empty-state instead of crashing.
 - `client/` — Vite + React 18 + TanStack Query + shadcn/ui + wouter (hash
   routing for static-host friendliness).
 - `shared/schema.ts` — Drizzle table definitions (sqlite dialect).
-- `server/explorer/`, `server/digest.ts` — autonomy engine + Slack digest.
+- `server/explorer/`, `server/digest.ts` — autonomy engine + Slack digest. The
+  largest explorer modules are split by concern into subdirectories, with the
+  original filename kept as a thin re-export barrel so import paths are stable:
+  - `ssh/` (`exec`, `runner-script`, `spawn`, `poll`) ← `direct-ssh.ts`
+  - `github/` (`repo-routing`, `render`, `client`, `issues`) ← `github-sync.ts`
+  - `resume/` (`inflight`, `dispatchers`, `loop`) ← `auto-resume.ts`
+  - `fleet/` (`briefings`, `dispatch-helpers`, `routes`) ← `fleet-routes.ts`
+  - `routes.ts` (the explorer route registrar) and the smaller modules
+    (`direct-dispatch`, `cascade-dispatch`, `prompt`, `*-signals`, etc.) remain
+    single-file.
 
 ## Deploy
 
