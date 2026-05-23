@@ -9,3 +9,6 @@ data.db-shm
 data.db-wal
 .vite/
 .claude/
+playwright-report/
+test-results/
+playwright/.cache/
