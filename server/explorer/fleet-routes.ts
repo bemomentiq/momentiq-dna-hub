@@ -66,7 +66,7 @@ Steps:
 You are a Mac Mini fleet lane (codex pin = gpt_5_5, claude pin = claude_opus_4_7 thinking). The Autonomy Hub Explorer (a sibling cron) files master/child issues into the target repos:
 ${repos.map((r) => `- https://github.com/${r}`).join("\n")}
 
-The Hub repo (\`bemomentiq/autonomy-hub\`) is the Hub's OWN source — self-improvement work goes there. The SID backend + frontend repos host autonomy work for the Shop Insights Dashboard. All are valid targets; pick based on highest-EV open issue.
+The Hub repo (\`bemomentiq/momentiq-dna-hub\`) is the Hub's OWN source — self-improvement work goes there. The momentiq-dna repo hosts the Veo 3.1 + vidgen-engine content engine (TikTok Shop UGC corpus, A/B prompt experiments, Thompson bandit, indistinguishability scoring), and the ScriptSage repos host the creator-facing video generation product. All are valid targets; pick based on highest-EV open issue.
 ${pickupSection}
 ### Compounding learning — recent executor runs (last 25, oldest auto-compacted)
 ${priorSection}
@@ -693,7 +693,7 @@ export function registerFleetRoutes(app: Express) {
       priority: original.priority,
       executor,
       agentBriefing: original.agent_briefing,
-      relevantSkills: ["codex-fleet", "momentiq-shop-insights-dashboard-v2"],
+      relevantSkills: ["codex-fleet", "mcc-roadmap-specialist-dna"],
       taskType: "dev_task",
     });
 
@@ -897,7 +897,7 @@ export function registerFleetRoutes(app: Express) {
       priority: "p0",
       executor: fallbackExecutor,
       agentBriefing: `## Goal\nFALLBACK dispatch for Autonomy Hub executor run #${runId}. Primary lane (gpt_5_5) did not complete in time.\n\n${run.agent_briefing}`,
-      relevantSkills: ["codex-fleet", "momentiq-shop-insights-dashboard-v2", "sid-autonomy-actions-catalog", "sid-pr-guardian"],
+      relevantSkills: ["codex-fleet", "mcc-roadmap-specialist-dna"],
       taskType: "dev_task",
     });
 
@@ -956,7 +956,7 @@ export function registerFleetRoutes(app: Express) {
       hub_status_url: hubBase,
       recent_prs: ghCtx.recent_prs,
       open_issues: ghCtx.open_issues,
-      loaded_skills: ["codex-fleet", "momentiq-shop-insights-dashboard-v2", "sid-autonomy-actions-catalog"],
+      loaded_skills: ["codex-fleet", "mcc-roadmap-specialist-dna"],
     });
     storage.updateFleetRun(run.id, { agent_briefing: briefing });
 
@@ -1004,7 +1004,7 @@ export function registerFleetRoutes(app: Express) {
       priority: body.priority,
       executor: body.executor,
       agentBriefing: briefing,
-      relevantSkills: ["codex-fleet", "momentiq-shop-insights-dashboard-v2", "sid-autonomy-actions-catalog"],
+      relevantSkills: ["codex-fleet", "mcc-roadmap-specialist-dna"],
       taskType: "dev_task",
     });
 

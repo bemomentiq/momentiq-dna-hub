@@ -88,7 +88,7 @@ OUTPUT FORMAT (STRICT JSON, no prose before/after):
   "next_pickup": "<=500 char chain handoff directive for the next Explorer run (see NEXT PICKUP DIRECTIVE above)",
   "findings": [{"severity":"high","category":"gap_to_prod","title":"…","body":"…","action_name":"…","phase_id":"…","evidence":["#3474","server/dispatch/recovery/usage-cap-deferral-gate.ts:143"]}, ...],
   "ledger_patterns": [{"pattern":"…","context":"…"}, ...],
-  "draft_tasks": [{"title":"[AH-EXPLORE-1] …","description":"…","project_slug":"momentiq-dna","repo_url":"https://github.com/bemomentiq/momentiq-dna","priority":"p1","relevant_skills":["codex-fleet","sid-autonomy-actions-catalog"],"effort_estimate":"4 hrs","agent_briefing":"## Goal\\n…\\n\\n## Context\\n…\\n\\n## Files\\n…\\n\\n## Implementation\\n…\\n\\n## Acceptance\\n…\\n\\n## Out-of-scope\\n…\\n\\n## Commit + PR\\n…\\n\\n## Notes\\n…","batch_id":"ah-explore-2026-04-30"}, ...]
+  "draft_tasks": [{"title":"[AH-EXPLORE-1] …","description":"…","project_slug":"momentiq-dna","repo_url":"https://github.com/bemomentiq/momentiq-dna","priority":"p1","relevant_skills":["codex-fleet","mcc-roadmap-specialist-dna"],"effort_estimate":"4 hrs","agent_briefing":"## Goal\\n…\\n\\n## Context\\n…\\n\\n## Files\\n…\\n\\n## Implementation\\n…\\n\\n## Acceptance\\n…\\n\\n## Out-of-scope\\n…\\n\\n## Commit + PR\\n…\\n\\n## Notes\\n…","batch_id":"ah-explore-2026-04-30"}, ...]
 }
 \`\`\`
 
