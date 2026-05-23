@@ -12,6 +12,7 @@ export const ROUTES: RouteSpec[] = [
   { path: "/ab-runs", title: /A\/B Experiments/ },
   { path: "/scoring", title: "IDS Scoring" },
   { path: "/bandit", title: /Bandit Posteriors/ },
+  { path: "/hitl", title: /HITL Burden/ },
   { path: "/scriptsage", title: /ScriptSage Throughput/ },
   { path: "/pipeline-health", title: "Pipeline Health" },
   { path: "/veo-cost", title: /Veo Cost/ },

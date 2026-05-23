@@ -20,6 +20,7 @@ import { dnaClient } from "./clients/dna";
 import { scriptsageClient } from "./clients/scriptsage";
 import { checkDnaHealth, checkScriptsageHealth, checkKalodataHealth } from "./clients/health";
 import { cacheStats, cacheBust } from "./clients/cache";
+import { getHitlQueue, computeHitlBurden } from "./hitl";
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   // Health check first — must be reachable without auth so Railway / uptime
@@ -624,6 +625,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const prefix = (req.query.prefix as string) || undefined;
     const n = cacheBust(prefix);
     res.json({ busted: n, prefix: prefix ?? "(all)" });
+  });
+
+  // HITL (human-in-the-loop) review queue — DR/IPS lints, RAI softener,
+  // brand-safety. Returns pending items so the HitlBurden page can render
+  // the worklist.
+  app.get("/api/hitl/queue", (_req, res) => {
+    const items = getHitlQueue();
+    res.json({ items, fetched_at: new Date().toISOString() });
+  });
+
+  // HITL burden aggregates — queue depth, avg review time, by-gate, by-reviewer,
+  // hour-of-day x day-of-week heatmap, bottleneck, % auto-passed.
+  app.get("/api/hitl/burden", (_req, res) => {
+    res.json(computeHitlBurden());
   });
 
   // SID-era endpoints removed during content-platform redesign:
