@@ -1,0 +1,17 @@
+# Railway deployment configuration for momentiq-dna-hub.
+# Healthcheck wires Railway's edge probes to /api/health (DB ping + uptime).
+# Required env vars (set in Railway dashboard):
+#   - HUB_TOKEN          shared secret for X-Hub-Token auth on /api/*
+#   - GH_PAT             GitHub PAT (also accepts GH_TOKEN / GITHUB_TOKEN)
+#   - SENTRY_DSN         (optional) Sentry project DSN to enable error capture
+#   - DATABASE_URL       (optional) Postgres URL; falls back to local sqlite
+
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "npm start"
+healthcheckPath = "/api/health"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
