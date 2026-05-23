@@ -23,6 +23,7 @@ import Themes from "@/pages/Themes";
 import Scoring from "@/pages/Scoring";
 import ThemeDetail from "@/pages/ThemeDetail";
 import Bandit from "@/pages/Bandit";
+import HitlBurden from "@/pages/HitlBurden";
 import DataTableDemo from "@/pages/dev/DataTableDemo";
 
 function AppRouter() {
@@ -40,6 +41,7 @@ function AppRouter() {
       <Route path="/ab-runs" component={AbRuns} />
       <Route path="/scoring" component={Scoring} />
       <Route path="/bandit" component={Bandit} />
+      <Route path="/hitl" component={HitlBurden} />
       <Route path="/scriptsage" component={ScriptSage} />
       <Route path="/pipeline-health" component={PipelineHealth} />
       <Route path="/veo-cost" component={VeoCost} />
@@ -52,7 +54,6 @@ function AppRouter() {
       <Route path="/training"><Redirect to="/scriptsage" /></Route>
       <Route path="/pipeline"><Redirect to="/subscriptions" /></Route>
       <Route path="/evals"><Redirect to="/ab-runs" /></Route>
-      <Route path="/hitl"><Redirect to="/scoring" /></Route>
       <Route path="/money-path"><Redirect to="/veo-cost" /></Route>
       {/* Hidden dev routes (not in sidebar). */}
       <Route path="/_dev/datatable" component={DataTableDemo} />
