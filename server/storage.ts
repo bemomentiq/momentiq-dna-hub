@@ -111,6 +111,10 @@ function ensureSchema() {
   const eHas = (col: string) => explorerCols.some((c) => c.name === col);
   if (!eHas("next_pickup")) sqlite.exec("ALTER TABLE explorer_runs ADD COLUMN next_pickup TEXT");
   if (!eHas("parent_run_id")) sqlite.exec("ALTER TABLE explorer_runs ADD COLUMN parent_run_id INTEGER");
+  // explorer_findings — DNA roadmap focus_area tag (DNA-8)
+  const findingCols = sqlite.prepare("PRAGMA table_info('explorer_findings')").all() as any[];
+  const fnHas = (col: string) => findingCols.some((c) => c.name === col);
+  if (!fnHas("focus_area")) sqlite.exec("ALTER TABLE explorer_findings ADD COLUMN focus_area TEXT");
   // draft_tasks
   const draftCols = sqlite.prepare("PRAGMA table_info('draft_tasks')").all() as any[];
   const has = (col: string) => draftCols.some((c) => c.name === col);
@@ -504,11 +508,16 @@ export const storage = {
   createFinding(input: InsertExplorerFinding): ExplorerFinding {
     return db.insert(explorerFindings).values(input).returning().get();
   },
-  listFindings(filter?: { status?: string; action_name?: string; run_id?: number; limit?: number }): ExplorerFinding[] {
+  listFindings(filter?: { status?: string; action_name?: string; run_id?: number; focus_area?: string | null; limit?: number }): ExplorerFinding[] {
     const conds = [] as any[];
     if (filter?.status) conds.push(eq(explorerFindings.status, filter.status));
     if (filter?.action_name) conds.push(eq(explorerFindings.action_name, filter.action_name));
     if (filter?.run_id) conds.push(eq(explorerFindings.run_id, filter.run_id));
+    if (filter?.focus_area !== undefined) {
+      conds.push(filter.focus_area === null
+        ? sql`focus_area IS NULL`
+        : eq(explorerFindings.focus_area, filter.focus_area));
+    }
     let q = db.select().from(explorerFindings) as any;
     if (conds.length) q = q.where(conds.length === 1 ? conds[0] : and(...conds));
     return q.orderBy(desc(explorerFindings.id)).limit(filter?.limit ?? 200).all();
@@ -516,6 +525,19 @@ export const storage = {
   updateFinding(id: number, updates: Partial<ExplorerFinding>): ExplorerFinding | undefined {
     db.update(explorerFindings).set(updates).where(eq(explorerFindings.id, id)).run();
     return db.select().from(explorerFindings).where(eq(explorerFindings.id, id)).get();
+  },
+
+  // Focus-area aggregates for the Explorer page (DNA-8). Returns the count of
+  // findings per focus_area in the last 7 days, plus a bucket for legacy
+  // uncategorized rows.
+  focusAreaCounts(windowDays: number = 7): { focus_area: string | null; count: number }[] {
+    const since = new Date(Date.now() - windowDays * 24 * 3600_000).toISOString();
+    const rows = sqlite
+      .prepare(
+        "SELECT focus_area, COUNT(*) as count FROM explorer_findings WHERE created_at >= ? GROUP BY focus_area",
+      )
+      .all(since) as { focus_area: string | null; count: number }[];
+    return rows;
   },
 
   // Ledger
