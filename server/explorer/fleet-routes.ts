@@ -693,7 +693,7 @@ export function registerFleetRoutes(app: Express) {
       priority: original.priority,
       executor,
       agentBriefing: original.agent_briefing,
-      relevantSkills: ["codex-fleet", "mcc-roadmap-specialist-dna"],
+      relevantSkills: ["codex-fleet", "mcc-roadmap-specialist-dna", "vidgen-continuity-ops"],
       taskType: "dev_task",
     });
 
@@ -897,7 +897,7 @@ export function registerFleetRoutes(app: Express) {
       priority: "p0",
       executor: fallbackExecutor,
       agentBriefing: `## Goal\nFALLBACK dispatch for Autonomy Hub executor run #${runId}. Primary lane (gpt_5_5) did not complete in time.\n\n${run.agent_briefing}`,
-      relevantSkills: ["codex-fleet", "mcc-roadmap-specialist-dna"],
+      relevantSkills: ["codex-fleet", "mcc-roadmap-specialist-dna", "vidgen-continuity-ops"],
       taskType: "dev_task",
     });
 
@@ -956,7 +956,7 @@ export function registerFleetRoutes(app: Express) {
       hub_status_url: hubBase,
       recent_prs: ghCtx.recent_prs,
       open_issues: ghCtx.open_issues,
-      loaded_skills: ["codex-fleet", "mcc-roadmap-specialist-dna"],
+      loaded_skills: ["codex-fleet", "mcc-roadmap-specialist-dna", "vidgen-continuity-ops"],
     });
     storage.updateFleetRun(run.id, { agent_briefing: briefing });
 
@@ -1004,7 +1004,7 @@ export function registerFleetRoutes(app: Express) {
       priority: body.priority,
       executor: body.executor,
       agentBriefing: briefing,
-      relevantSkills: ["codex-fleet", "mcc-roadmap-specialist-dna"],
+      relevantSkills: ["codex-fleet", "mcc-roadmap-specialist-dna", "vidgen-continuity-ops"],
       taskType: "dev_task",
     });
 
