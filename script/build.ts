@@ -24,10 +24,8 @@ const allowlist = [
   "passport-local",
   "stripe",
   "uuid",
-  "ws",
   "xlsx",
   "zod",
-  "zod-validation-error",
 ];
 
 async function buildAll() {
