@@ -19,7 +19,6 @@ export const ROUTES: RouteSpec[] = [
   { path: "/subscriptions", title: /Subscriptions/ },
   { path: "/roadmap", title: /Roadmap/ },
   { path: "/issues", title: /GitHub Issues/ },
-  { path: "/autonomy", title: /Autonomy Dashboard/ },
   { path: "/explorer", title: /Self-Learning Explorer/ },
   { path: "/backlog", title: /Agent-Proposed Backlog/ },
   { path: "/run", title: "Run on Fleet" },

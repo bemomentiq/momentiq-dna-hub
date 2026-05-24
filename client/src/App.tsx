@@ -19,7 +19,6 @@ import Explorer from "@/pages/Explorer";
 import Backlog from "@/pages/Backlog";
 import Run from "@/pages/Run";
 import Fleet from "@/pages/Fleet";
-import Autonomy from "@/pages/Autonomy";
 import Themes from "@/pages/Themes";
 import Scoring from "@/pages/Scoring";
 import ThemeDetail from "@/pages/ThemeDetail";
@@ -36,7 +35,6 @@ function AppRouter() {
       <Route path="/backlog" component={Backlog} />
       <Route path="/run" component={Run} />
       <Route path="/fleet" component={Fleet} />
-      <Route path="/autonomy" component={Autonomy} />
       <Route path="/themes" component={Themes} />
       <Route path="/themes/:slug" component={ThemeDetail} />
       <Route path="/ab-runs" component={AbRuns} />
@@ -50,9 +48,10 @@ function AppRouter() {
       <Route path="/subscriptions" component={Subscriptions} />
       <Route path="/roadmap" component={Roadmap} />
       <Route path="/issues" component={Issues} />
+      {/* FUTURE: DNA action library — `/actions`, `/actions/:name`, and `/autonomy` */}
+      {/* are intentionally unmapped so they 404 until a DNA-domain action surface */}
+      {/* is designed (knob configs, engine catalog, post-proc stages, etc.). */}
       {/* SID-era routes — redirect to home so old bookmarks don't 404. */}
-      <Route path="/actions"><Redirect to="/themes" /></Route>
-      <Route path="/actions/:name"><Redirect to="/themes" /></Route>
       <Route path="/training"><Redirect to="/scriptsage" /></Route>
       <Route path="/evals"><Redirect to="/ab-runs" /></Route>
       <Route path="/money-path"><Redirect to="/veo-cost" /></Route>

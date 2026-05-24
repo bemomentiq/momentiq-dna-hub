@@ -69,7 +69,7 @@ for the full dispatch flow.
 | `/roadmap` | `/api/content-platform/roadmap` | GitHub milestones + `epic:*` labels |
 | `/issues` | `/api/gh-issues?state=&labels=` | GitHub Issues API |
 | `/hitl` | `/api/hitl/queue`, `/api/hitl/burden` | local sqlite |
-| `/autonomy`, `/fleet`, `/backlog`, `/explorer`, `/run` | `/api/autonomy/*`, `/api/fleet/*` | local sqlite (run state) |
+| `/fleet`, `/backlog`, `/explorer`, `/run` | `/api/autonomy/*`, `/api/fleet/*` | local sqlite (run state) |
 
 All upstream reads are wrapped in a 30–60s in-process TTL cache so the hub
 doesn't hammer DNA / ScriptSage on every page load. Null upstream results
