@@ -124,7 +124,7 @@ export default function Run() {
               className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm font-mono"
             />
             <div className="text-[10px] text-muted-foreground mt-1">
-              Full repo context (recent merged PRs, open autonomy-hub issues), the relevant skills (codex-fleet, mcc-roadmap-specialist-dna), and the 8-H2 briefing template are auto-injected on top of your prompt.
+              Full repo context (recent merged PRs, open momentiq-dna issues), the relevant skills (codex-fleet, mcc-roadmap-specialist-dna, vidgen-continuity-ops), and the 8-H2 briefing template are auto-injected on top of your prompt.
             </div>
           </label>
           <div className="grid md:grid-cols-3 gap-3">
