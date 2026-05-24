@@ -21,6 +21,7 @@ import { scriptsageClient } from "./clients/scriptsage";
 import { checkDnaHealth, checkScriptsageHealth, checkKalodataHealth } from "./clients/health";
 import { cacheStats, cacheBust } from "./clients/cache";
 import { getHitlQueue, computeHitlBurden } from "./hitl";
+import { DNA_PIPELINE_STAGES } from "../shared/dna-pipeline-stages";
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   // Health check first — must be reachable without auth so Railway / uptime
@@ -625,6 +626,38 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const prefix = (req.query.prefix as string) || undefined;
     const n = cacheBust(prefix);
     res.json({ busted: n, prefix: prefix ?? "(all)" });
+  });
+
+  // DNA data-pipeline stages — returns the canonical 7-stage roadmap (Kalodata
+  // → Gemini Vision → DNA-knob → engine dispatch → post-proc → IDS scoring →
+  // LoRA drift). Rollups are stubbed null pending the neon-signals rollup
+  // wiring; the client renders the cold-state per stage so the page is
+  // walkable end-to-end today.
+  app.get("/api/data-pipeline/stages", (_req, res) => {
+    const stages = DNA_PIPELINE_STAGES.map((s) => ({
+      stage_id: s.id,
+      label: s.label,
+      description: s.description,
+      focus_area: s.focus_area,
+      logs_query: s.logs_query,
+      throughput_24h: 0,
+      success_pct: null,
+      p95_ms: null,
+      errors_24h: 0,
+      last_run_at: null,
+      recent_failures: [] as Array<{
+        run_id: string | null;
+        action_name: string;
+        error_message: string | null;
+        failed_at: string;
+      }>,
+    }));
+    res.json({
+      neon_configured: false,
+      neon_error: "rollup wiring deferred — see follow-up issue",
+      stages,
+      fetched_at: new Date().toISOString(),
+    });
   });
 
   // HITL (human-in-the-loop) review queue — DR/IPS lints, RAI softener,

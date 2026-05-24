@@ -10,6 +10,7 @@ import Roadmap from "@/pages/Roadmap";
 import AbRuns from "@/pages/AbRuns";
 import ScriptSage from "@/pages/ScriptSage";
 import PipelineHealth from "@/pages/PipelineHealth";
+import DataPipeline from "@/pages/DataPipeline";
 import Issues from "@/pages/Issues";
 import ExecutiveBrief from "@/pages/ExecutiveBrief";
 import VeoCost from "@/pages/VeoCost";
@@ -44,6 +45,7 @@ function AppRouter() {
       <Route path="/hitl" component={HitlBurden} />
       <Route path="/scriptsage" component={ScriptSage} />
       <Route path="/pipeline-health" component={PipelineHealth} />
+      <Route path="/pipeline" component={DataPipeline} />
       <Route path="/veo-cost" component={VeoCost} />
       <Route path="/subscriptions" component={Subscriptions} />
       <Route path="/roadmap" component={Roadmap} />
@@ -52,7 +54,6 @@ function AppRouter() {
       <Route path="/actions"><Redirect to="/themes" /></Route>
       <Route path="/actions/:name"><Redirect to="/themes" /></Route>
       <Route path="/training"><Redirect to="/scriptsage" /></Route>
-      <Route path="/pipeline"><Redirect to="/subscriptions" /></Route>
       <Route path="/evals"><Redirect to="/ab-runs" /></Route>
       <Route path="/money-path"><Redirect to="/veo-cost" /></Route>
       {/* Hidden dev routes (not in sidebar). */}

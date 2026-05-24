@@ -105,6 +105,12 @@ const checks: Check[] = [
     expectStatus: [200, 404, 502],
   },
   {
+    name: "data-pipeline/stages",
+    path: "/api/data-pipeline/stages",
+    shape: (b: any) =>
+      Array.isArray(b?.stages) && b.stages.length === 7 ? null : "expected 7 stages",
+  },
+  {
     name: "content-platform/cache",
     path: "/api/content-platform/cache",
     shape: (b: any) =>
