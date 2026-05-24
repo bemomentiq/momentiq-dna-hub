@@ -172,25 +172,20 @@ async function fetchNeonKpis(): Promise<NeonKpiRow | null> {
 
 async function buildSnapshot(): Promise<DnaKpis> {
   const configured = dnaConfigured();
-  const [ids7, ids14, bandit, abRunsResp, neon] = await Promise.all([
+  const [ids7, bandit, abRunsResp, neon] = await Promise.all([
     dnaClient.idsDistribution(7),
-    dnaClient.idsDistribution(14),
     dnaClient.bandit.learningMetrics(),
     dnaClient.abRuns({ status: "running", limit: 5 }),
     fetchNeonKpis(),
   ]);
 
   const overall7 = ids7?.distributions.find((d) => d.dimension === "overall") ?? null;
-  const overall14 = ids14?.distributions.find((d) => d.dimension === "overall") ?? null;
-  // Prior 7d IDS isn't directly derivable from the 14-day median; we use the
-  // 14-day median as the prior baseline reference, which is a reasonable
-  // smoothing proxy until momentiq-dna exposes a windowed series.
-  const priorIdsMedian =
-    overall14 && overall7
-      ? // If we had counts, we could back-solve; lacking that, fall back to
-        // the wider window median as the comparison baseline.
-        overall14.median
-      : null;
+  // The 14d median includes the current 7d window, so it is NOT a valid
+  // prior-7d baseline. Until momentiq-dna exposes a true prior-window
+  // series, we leave the IDS WoW delta unsourced rather than show a
+  // misleading proxy. Neon-backed fields below have their own prior
+  // 7–14d window queries.
+  const priorIdsMedian: number | null = null;
 
   const snapshot: DnaKpiSnapshot = {
     ids_convergence_pct: pctTowardTarget(overall7?.median, IDS_TARGET),
