@@ -27,7 +27,6 @@ const PAGES: { href: string; label: string }[] = [
   { href: "/subscriptions", label: "Subscriptions" },
   { href: "/roadmap", label: "Roadmap" },
   { href: "/issues", label: "GitHub Issues" },
-  { href: "/autonomy", label: "Autonomy" },
   { href: "/explorer", label: "Explorer" },
   { href: "/backlog", label: "Agent Backlog" },
   { href: "/run", label: "Run on Fleet" },

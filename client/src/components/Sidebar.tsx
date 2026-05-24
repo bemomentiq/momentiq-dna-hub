@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Grid3x3, Map, GitPullRequest, Activity, DollarSign, Workflow, ClipboardCheck, Brain, Rocket, Send, Cpu, X, Gauge, BarChart3, ShieldCheck, GitBranch } from "lucide-react";
+import { LayoutDashboard, Grid3x3, Map, GitPullRequest, Activity, DollarSign, Workflow, ClipboardCheck, Brain, Rocket, Send, Cpu, X, BarChart3, ShieldCheck, GitBranch } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
@@ -17,7 +17,6 @@ const items = [
   { href: "/subscriptions", label: "Subscriptions", icon: DollarSign },
   { href: "/roadmap", label: "Roadmap", icon: Map },
   { href: "/issues", label: "GitHub Issues", icon: GitPullRequest },
-  { href: "/autonomy", label: "Autonomy", icon: Gauge },
   { href: "/explorer", label: "Explorer", icon: Brain, group: "agent" },
   { href: "/backlog", label: "Agent Backlog", icon: Rocket, group: "agent" },
   { href: "/run", label: "Run on Fleet", icon: Send, group: "agent" },

@@ -148,7 +148,7 @@ function buildNarrative(data: DnaKpis): string[] {
   const lines: string[] = [];
   if (!data.dna_configured) {
     return [
-      "momentiq-dna service is not reachable from this hub — DNA_API_BASE is unset. Configure it in /autonomy to begin reporting KPIs.",
+      "momentiq-dna service is not reachable from this hub — DNA_API_BASE is unset. Set it in the hub environment to begin reporting KPIs.",
     ];
   }
   const idsDelta = deltaPctPoints(
