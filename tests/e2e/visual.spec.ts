@@ -39,6 +39,26 @@ test.describe("visual regression baseline", () => {
         }),
       ),
     );
+    await page.route("**/api/overview/dna-kpis", (r) =>
+      r.fulfill(
+        json({
+          dna_configured: false,
+          neon_available: false,
+          ids_target: 0.85,
+          ids_convergence_pct: null,
+          bandit_m11_progress: null,
+          video_win_rate_24h: null,
+          gmv_max_roas_7d: null,
+          videos_24h: null,
+          videos_ids_pass_24h: null,
+          outbound_used_24h: null,
+          prior_7d: null,
+          recent_runs: [],
+          fetched_at: "1970-01-01T00:00:00.000Z",
+        }),
+      ),
+    );
+    await page.route("**/api/gh-issues**", (r) => r.fulfill(json({ issues: [] })));
     await page.route("**/api/content-platform/ids-distribution**", (r) =>
       r.fulfill(json({ dna_configured: false, distributions: null, window_days: 7, fetched_at: "1970-01-01T00:00:00.000Z" })),
     );

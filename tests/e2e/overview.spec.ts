@@ -1,40 +1,47 @@
 import { expect, test } from "@playwright/test";
 import { expectNoConsoleErrors, gotoHash, watchConsole } from "./helpers";
 
-// The overview page renders 8 StatCard tiles (Corpus / A/B / IDS / Veo /
-// Scripts / Videos / Fallback / MRR). When upstream services are not
-// connected each tile shows a "not connected" pill but still renders.
+// Overview renders 4 DNA hero tiles (IDS convergence, Bandit M11, win-rate,
+// GMV Max ROAS) plus a 24h pipeline panel and a blockers panel. When the DNA
+// service is unconfigured, the tiles show a "not connected" pill but the
+// page still renders end-to-end without console errors.
 const KPI_LABELS = [
-  "Corpus Videos",
-  "Active A/B Runs",
-  "IDS Median 7d",
-  "Veo Spend 7d",
-  "ScriptSage Scripts /24h",
-  "ScriptSage Videos /24h",
-  "Fallback / Error Rate",
-  "MRR · Subscribers",
+  "IDS Convergence",
+  "Bandit M11 Progress",
+  "Video Win-Rate 24h",
+  "GMV Max ROAS 7d",
 ];
 
+const EMPTY_KPI_BODY = {
+  ids_convergence_pct: null,
+  bandit_m11_progress: null,
+  video_win_rate_24h: null,
+  gmv_max_roas_7d: null,
+  videos_24h: null,
+  videos_ids_pass_24h: null,
+  outbound_used_24h: null,
+  dna_configured: false,
+  neon_available: false,
+  ids_target: 0.85,
+  prior_7d: null,
+  recent_runs: [],
+  fetched_at: new Date().toISOString(),
+};
+
 test.describe("Overview", () => {
-  test("renders all KPI tiles when upstreams are unconfigured", async ({ page }) => {
+  test("renders all DNA KPI tiles when DNA service is unconfigured", async ({ page }) => {
     const watcher = watchConsole(page);
 
-    // Force the empty-state path so the test is hermetic regardless of what
-    // env vars the dev server happens to inherit.
-    await page.route("**/api/content-platform/overview", (route) =>
+    await page.route("**/api/overview/dna-kpis", (route) =>
       route.fulfill({
         contentType: "application/json",
-        body: JSON.stringify({
-          dna_configured: false,
-          scriptsage_configured: false,
-          corpus: null,
-          ab_runs_active: null,
-          ids_median_7d: null,
-          veo_spend_7d_usd: null,
-          scriptsage: null,
-          subscriptions: null,
-          fetched_at: new Date().toISOString(),
-        }),
+        body: JSON.stringify(EMPTY_KPI_BODY),
+      }),
+    );
+    await page.route("**/api/gh-issues**", (route) =>
+      route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ issues: [] }),
       }),
     );
 
@@ -44,56 +51,77 @@ test.describe("Overview", () => {
       await expect(page.getByText(label, { exact: true })).toBeVisible();
     }
 
-    // "not connected" italic chip is the empty-state signal.
     await expect(page.getByText("not connected").first()).toBeVisible();
-
-    // The configuration warning block calls out both env vars by name.
-    await expect(page.getByText("DNA_API_BASE")).toBeVisible();
-    await expect(page.getByText("SCRIPTSAGE_API_BASE")).toBeVisible();
+    await expect(page.getByText("DNA_API_BASE", { exact: false })).toBeVisible();
+    await expect(page.getByText("DNA_NEON_READ_URL", { exact: false })).toBeVisible();
 
     await expectNoConsoleErrors(watcher);
   });
 
-  test("renders numeric KPI values when upstreams return data", async ({ page }) => {
+  test("renders numeric DNA KPI values + recent runs when data is present", async ({
+    page,
+  }) => {
     const watcher = watchConsole(page);
 
-    await page.route("**/api/content-platform/overview", (route) =>
+    await page.route("**/api/overview/dna-kpis", (route) =>
       route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({
+          ids_convergence_pct: 92,
+          bandit_m11_progress: 65,
+          video_win_rate_24h: 0.58,
+          gmv_max_roas_7d: 3.42,
+          videos_24h: 240,
+          videos_ids_pass_24h: 188,
+          outbound_used_24h: 96,
           dna_configured: true,
-          scriptsage_configured: true,
-          corpus: { videos: 12345, gmv_usd: 678900, last_harvest_at: null },
-          ab_runs_active: 7,
-          ids_median_7d: 0.91,
-          veo_spend_7d_usd: 4321.5,
-          scriptsage: {
-            scripts_generated_24h: 200,
-            scripts_generated_7d: 1400,
-            videos_generated_24h: 88,
-            videos_generated_7d: 600,
-            fallback_rate_24h: 0.03,
-            error_rate_24h: 0.01,
-            status_sync_lag_seconds: 5,
+          neon_available: true,
+          ids_target: 0.85,
+          prior_7d: {
+            ids_convergence_pct: 88,
+            bandit_m11_progress: null,
+            video_win_rate_24h: null,
+            gmv_max_roas_7d: 3.05,
+            videos_24h: 210,
+            videos_ids_pass_24h: 160,
+            outbound_used_24h: 80,
           },
-          subscriptions: {
-            active_users: 240,
-            mrr_usd: 9800,
-            tier_mix: [],
-            top_users_by_credit_burn: [],
-          },
+          recent_runs: [
+            {
+              run_id: "abcdef1234567890",
+              theme: "stationery-spring",
+              status: "running",
+              ids_mean: 0.87,
+              started_at: "2026-05-20T10:00:00Z",
+            },
+            {
+              run_id: "1234567890abcdef",
+              theme: "kitchen-gadgets",
+              status: "completed",
+              ids_mean: 0.91,
+              started_at: "2026-05-19T18:00:00Z",
+            },
+          ],
           fetched_at: new Date().toISOString(),
         }),
+      }),
+    );
+    await page.route("**/api/gh-issues**", (route) =>
+      route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ issues: [] }),
       }),
     );
 
     await gotoHash(page, "/");
 
-    await expect(page.getByTestId("stat-corpus-videos")).toContainText("12,345");
-    await expect(page.getByTestId("stat-active-a/b-runs")).toContainText("7");
-    await expect(page.getByTestId("stat-ids-median-7d")).toContainText("0.91");
-    // ≥0.85 should tag the IDS tile as "passing".
-    await expect(page.getByText("≥0.85")).toBeVisible();
+    await expect(page.getByTestId("stat-ids-convergence")).toContainText("92%");
+    await expect(page.getByTestId("stat-bandit-m11-progress")).toContainText("65%");
+    await expect(page.getByTestId("stat-video-win-rate-24h")).toContainText("58");
+    await expect(page.getByTestId("stat-gmv-max-roas-7d")).toContainText("3.42×");
+
+    // Recent-runs panel has two entries; one of them should render.
+    await expect(page.getByTestId("recent-run-abcdef1234567890")).toBeVisible();
 
     await expectNoConsoleErrors(watcher);
   });

@@ -1,44 +1,55 @@
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
-import { StatCard } from "@/components/StatCard";
-import { Skeleton } from "@/components/states";
+import { StatCard, ProgressBar } from "@/components/StatCard";
+import { Skeleton, ErrorState } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
-import { Video, FlaskConical, Target, DollarSign, FileText, Film, AlertTriangle, Users } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Target,
+  Activity,
+  Trophy,
+  DollarSign,
+  AlertOctagon,
+  PlayCircle,
+  ExternalLink,
+} from "lucide-react";
 
-type CorpusStats = {
-  videos: number;
-  gmv_usd: number;
-  last_harvest_at: string | null;
+type DnaKpiSnapshot = {
+  ids_convergence_pct: number | null;
+  bandit_m11_progress: number | null;
+  video_win_rate_24h: number | null;
+  gmv_max_roas_7d: number | null;
+  videos_24h: number | null;
+  videos_ids_pass_24h: number | null;
+  outbound_used_24h: number | null;
 };
 
-type ScriptSageStats = {
-  scripts_generated_24h: number;
-  scripts_generated_7d: number;
-  videos_generated_24h: number;
-  videos_generated_7d: number;
-  fallback_rate_24h: number;
-  error_rate_24h: number;
-  status_sync_lag_seconds: number;
+type RecentRun = {
+  run_id: string;
+  theme: string;
+  status: string;
+  ids_mean: number | null;
+  started_at: string;
 };
 
-type SubscriptionStats = {
-  active_users: number;
-  mrr_usd: number;
-  tier_mix: { tier: string; count: number; mrr_usd: number }[];
-  top_users_by_credit_burn: { user_id: string; email: string | null; credits_30d: number }[];
-};
-
-type ContentPlatformOverview = {
+type DnaKpis = DnaKpiSnapshot & {
   dna_configured: boolean;
-  scriptsage_configured: boolean;
-  corpus: CorpusStats | null;
-  ab_runs_active: number | null;
-  ids_median_7d: number | null;
-  veo_spend_7d_usd: number | null;
-  scriptsage: ScriptSageStats | null;
-  subscriptions: SubscriptionStats | null;
+  neon_available: boolean;
+  ids_target: number;
+  prior_7d: DnaKpiSnapshot | null;
+  recent_runs: RecentRun[];
   fetched_at: string;
 };
+
+type GhIssue = {
+  number: number;
+  title: string;
+  html_url: string;
+  repo: string;
+  labels: string[];
+  updated_at: string;
+};
+type GhIssuesResp = { issues: GhIssue[] };
 
 const DASH = "—";
 
@@ -47,202 +58,393 @@ function fmtInt(n: number | null | undefined): string {
   return Math.round(n).toLocaleString();
 }
 
-function fmtUsd(n: number | null | undefined, opts: { compact?: boolean } = {}): string {
+function fmtPct(n: number | null | undefined, digits = 1): string {
   if (n == null || !Number.isFinite(n)) return DASH;
-  if (opts.compact && Math.abs(n) >= 1000) {
-    return `$${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k`;
-  }
-  return `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  const v = n <= 1 && n >= -1 ? n * 100 : n;
+  return `${v.toFixed(digits)}%`;
 }
 
-function fmtPct(n: number | null | undefined): string {
+function fmtRoas(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return DASH;
-  // accept either 0-1 fraction or already-percent
-  const v = n <= 1 ? n * 100 : n;
-  return `${v.toFixed(1)}%`;
+  return `${n.toFixed(2)}×`;
 }
 
-function idsTone(v: number | null): "good" | "warn" | "bad" | "default" {
-  if (v == null || !Number.isFinite(v)) return "default";
-  if (v >= 0.85) return "good";
-  if (v >= 0.7) return "warn";
+function deltaPctPoints(
+  cur: number | null | undefined,
+  prior: number | null | undefined,
+): number | null {
+  if (cur == null || prior == null) return null;
+  if (!Number.isFinite(cur) || !Number.isFinite(prior)) return null;
+  const c = cur <= 1 && cur >= -1 ? cur * 100 : cur;
+  const p = prior <= 1 && prior >= -1 ? prior * 100 : prior;
+  return Math.round((c - p) * 10) / 10;
+}
+
+function deltaRatio(
+  cur: number | null | undefined,
+  prior: number | null | undefined,
+): number | null {
+  if (cur == null || prior == null) return null;
+  if (!Number.isFinite(cur) || !Number.isFinite(prior) || prior === 0) return null;
+  return Math.round(((cur - prior) / prior) * 1000) / 10;
+}
+
+function idsTone(pct: number | null): "good" | "warn" | "bad" | "default" {
+  if (pct == null || !Number.isFinite(pct)) return "default";
+  if (pct >= 100) return "good";
+  if (pct >= 82) return "warn";
   return "bad";
 }
 
-function idsBadgeClass(tone: "good" | "warn" | "bad" | "default"): string {
-  return {
-    good: "bg-emerald-500/15 text-emerald-500 border-emerald-500/40",
-    warn: "bg-amber-500/15 text-amber-500 border-amber-500/40",
-    bad: "bg-rose-500/15 text-rose-500 border-rose-500/40",
-    default: "bg-muted text-muted-foreground border-card-border",
-  }[tone];
+function runStatusBadge(status: string) {
+  const map: Record<string, string> = {
+    promoted: "bg-emerald-500/15 text-emerald-500 border-emerald-500/40",
+    completed: "bg-sky-500/15 text-sky-500 border-sky-500/40",
+    running: "bg-amber-500/15 text-amber-500 border-amber-500/40",
+    rejected: "bg-rose-500/15 text-rose-500 border-rose-500/40",
+  };
+  return map[status] ?? "bg-muted text-muted-foreground border-card-border";
 }
 
 function NotConnected({ label }: { label: string }) {
   return (
-    <span className="text-xs text-muted-foreground italic" data-testid={`not-connected-${label}`}>
+    <span
+      className="text-xs text-muted-foreground italic"
+      data-testid={`not-connected-${label}`}
+    >
       not connected
     </span>
   );
 }
 
 export default function Overview() {
-  const { data, isLoading } = useQuery<ContentPlatformOverview>({
-    queryKey: ["/api/content-platform/overview"],
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery<DnaKpis>({ queryKey: ["/api/overview/dna-kpis"] });
+
+  const { data: blockersResp, isPending: blockersPending } = useQuery<GhIssuesResp>({
+    queryKey: ["/api/gh-issues?state=open&labels=blocker"],
   });
 
   if (isLoading || !data) {
     return (
-      <Layout title="Content Platform Overview">
+      <Layout title="DNA Pipeline Overview">
         <Skeleton lines={6} />
       </Layout>
     );
   }
 
-  const {
-    dna_configured,
-    scriptsage_configured,
-    corpus,
-    ab_runs_active,
-    ids_median_7d,
-    veo_spend_7d_usd,
-    scriptsage,
-    subscriptions,
-  } = data;
+  if (isError) {
+    return (
+      <Layout title="DNA Pipeline Overview">
+        <ErrorState
+          title="Failed to load DNA KPIs"
+          error={error}
+          onRetry={() => void refetch()}
+        />
+      </Layout>
+    );
+  }
 
-  const idsT = idsTone(ids_median_7d);
+  const idsT = idsTone(data.ids_convergence_pct);
+  const idsDelta = deltaPctPoints(
+    data.ids_convergence_pct,
+    data.prior_7d?.ids_convergence_pct,
+  );
+  const roasDelta = deltaRatio(data.gmv_max_roas_7d, data.prior_7d?.gmv_max_roas_7d);
+  const videosDelta = deltaRatio(data.videos_24h, data.prior_7d?.videos_24h);
+  const idsPassDelta = deltaRatio(
+    data.videos_ids_pass_24h,
+    data.prior_7d?.videos_ids_pass_24h,
+  );
+  const outboundDelta = deltaRatio(
+    data.outbound_used_24h,
+    data.prior_7d?.outbound_used_24h,
+  );
+
+  const blockers = (blockersResp?.issues ?? [])
+    .slice()
+    .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+    .slice(0, 5);
 
   return (
     <Layout
-      title="Content Platform Overview"
-      subtitle="momentiq-dna · scriptsage · TikTok Shop AI content pipeline"
+      title="DNA Pipeline Overview"
+      subtitle="IDS convergence · Bandit M11 · video win-rate · GMV Max ROAS"
     >
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard
-          label="Corpus Videos"
-          icon={<Video className="h-4 w-4" />}
-          value={dna_configured ? fmtInt(corpus?.videos) : <NotConnected label="corpus-videos" />}
+          label="IDS Convergence"
+          icon={<Target className="h-4 w-4" />}
+          tone={idsT === "default" ? "default" : idsT}
+          value={
+            data.dna_configured ? (
+              <span className="flex items-baseline gap-2">
+                <span>{fmtPct(data.ids_convergence_pct, 0)}</span>
+                <span className="text-xs text-muted-foreground">
+                  of {data.ids_target.toFixed(2)} target
+                </span>
+              </span>
+            ) : (
+              <NotConnected label="ids-convergence" />
+            )
+          }
           sub={
-            dna_configured
-              ? `GMV ${fmtUsd(corpus?.gmv_usd ?? null, { compact: true })}`
+            data.dna_configured ? (
+              <ProgressBar
+                value={data.ids_convergence_pct ?? 0}
+                tone={idsT === "default" ? "primary" : idsT}
+              />
+            ) : (
+              "DNA_API_BASE unset"
+            )
+          }
+          delta={idsDelta != null ? { value: idsDelta, suffix: "pp" } : null}
+        />
+
+        <StatCard
+          label="Bandit M11 Progress"
+          icon={<Activity className="h-4 w-4" />}
+          value={
+            data.dna_configured ? (
+              fmtPct(data.bandit_m11_progress, 0)
+            ) : (
+              <NotConnected label="bandit-m11" />
+            )
+          }
+          sub={
+            data.dna_configured ? (
+              <ProgressBar value={data.bandit_m11_progress ?? 0} />
+            ) : (
+              "DNA_API_BASE unset"
+            )
+          }
+        />
+
+        <StatCard
+          label="Video Win-Rate 24h"
+          icon={<Trophy className="h-4 w-4" />}
+          value={
+            data.dna_configured ? (
+              fmtPct(data.video_win_rate_24h)
+            ) : (
+              <NotConnected label="win-rate" />
+            )
+          }
+          sub={
+            data.dna_configured
+              ? "Veo 3.1 Fast vs. baselines"
               : "DNA_API_BASE unset"
           }
         />
 
         <StatCard
-          label="Active A/B Runs"
-          icon={<FlaskConical className="h-4 w-4" />}
-          value={dna_configured ? fmtInt(ab_runs_active) : <NotConnected label="ab-runs" />}
-          sub={dna_configured ? "running tests" : "DNA_API_BASE unset"}
-        />
-
-        <StatCard
-          label="IDS Median 7d"
-          icon={<Target className="h-4 w-4" />}
-          tone={idsT === "default" ? "default" : idsT}
-          value={
-            dna_configured ? (
-              <span className="flex items-center gap-2">
-                <span>{ids_median_7d != null ? ids_median_7d.toFixed(2) : DASH}</span>
-                {ids_median_7d != null && (
-                  <Badge variant="outline" className={idsBadgeClass(idsT)}>
-                    {idsT === "good" ? "≥0.85" : idsT === "warn" ? "0.70–0.84" : "<0.70"}
-                  </Badge>
-                )}
-              </span>
-            ) : (
-              <NotConnected label="ids" />
-            )
-          }
-          sub={dna_configured ? "indistinguishability score" : "DNA_API_BASE unset"}
-        />
-
-        <StatCard
-          label="Veo Spend 7d"
+          label="GMV Max ROAS 7d"
           icon={<DollarSign className="h-4 w-4" />}
-          value={dna_configured ? fmtUsd(veo_spend_7d_usd, { compact: true }) : <NotConnected label="veo-spend" />}
-          sub={dna_configured ? "Veo 3.1 generation cost" : "DNA_API_BASE unset"}
-          // Cost metric: rising spend should render red. delta stays null until the
-          // overview endpoint exposes a prior-week comparison field.
-          delta={null}
-          invertColors
-        />
-
-        <StatCard
-          label="ScriptSage Scripts /24h"
-          icon={<FileText className="h-4 w-4" />}
-          value={scriptsage_configured ? fmtInt(scriptsage?.scripts_generated_24h) : <NotConnected label="scripts" />}
-          sub={
-            scriptsage_configured
-              ? `${fmtInt(scriptsage?.scripts_generated_7d)} over 7d`
-              : "SCRIPTSAGE_API_BASE unset"
-          }
-          delta={null}
-        />
-
-        <StatCard
-          label="ScriptSage Videos /24h"
-          icon={<Film className="h-4 w-4" />}
-          value={scriptsage_configured ? fmtInt(scriptsage?.videos_generated_24h) : <NotConnected label="videos" />}
-          sub={
-            scriptsage_configured
-              ? `${fmtInt(scriptsage?.videos_generated_7d)} over 7d`
-              : "SCRIPTSAGE_API_BASE unset"
-          }
-          delta={null}
-        />
-
-        <StatCard
-          label="Fallback / Error Rate"
-          icon={<AlertTriangle className="h-4 w-4" />}
-          tone={
-            scriptsage_configured && scriptsage
-              ? scriptsage.error_rate_24h > 0.05 || scriptsage.fallback_rate_24h > 0.2
-                ? "warn"
-                : "good"
-              : "default"
-          }
           value={
-            scriptsage_configured ? (
-              <span className="text-base">
-                {fmtPct(scriptsage?.fallback_rate_24h)} <span className="text-muted-foreground">/</span>{" "}
-                {fmtPct(scriptsage?.error_rate_24h)}
-              </span>
+            data.dna_configured ? (
+              fmtRoas(data.gmv_max_roas_7d)
             ) : (
-              <NotConnected label="rates" />
+              <NotConnected label="gmv-roas" />
             )
           }
-          sub={scriptsage_configured ? "fallback / error · 24h" : "SCRIPTSAGE_API_BASE unset"}
-        />
-
-        <StatCard
-          label="MRR · Subscribers"
-          icon={<Users className="h-4 w-4" />}
-          value={
-            scriptsage_configured ? (
-              <span className="text-base">
-                {fmtUsd(subscriptions?.mrr_usd ?? null, { compact: true })}{" "}
-                <span className="text-muted-foreground">·</span> {fmtInt(subscriptions?.active_users)}
-              </span>
-            ) : (
-              <NotConnected label="mrr" />
-            )
+          sub={
+            data.dna_configured
+              ? data.neon_available
+                ? "DNA-generated videos"
+                : "DNA_NEON_READ_URL unset"
+              : "DNA_API_BASE unset"
           }
-          sub={scriptsage_configured ? "monthly recurring · active users" : "SCRIPTSAGE_API_BASE unset"}
+          delta={roasDelta != null ? { value: roasDelta, suffix: "%" } : null}
         />
       </div>
 
-      {(!dna_configured || !scriptsage_configured) && (
-        <div className="mt-6 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 text-xs text-muted-foreground">
-          <div className="font-medium text-amber-500 mb-1">Upstream services not fully configured</div>
-          <ul className="space-y-0.5">
-            {!dna_configured && <li>· Set <code className="font-mono">DNA_API_BASE</code> to connect momentiq-dna.</li>}
-            {!scriptsage_configured && (
-              <li>· Set <code className="font-mono">SCRIPTSAGE_API_BASE</code> to connect scriptsage-backend.</li>
+      <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Card className="lg:col-span-2">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <PlayCircle className="h-4 w-4 text-muted-foreground" />
+              24h Pipeline Volume
+              {!data.neon_available && (
+                <Badge variant="outline" className="ml-1 text-[10px]">
+                  Neon not connected
+                </Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-3 gap-4">
+              <PipelineMetric
+                label="Videos generated"
+                value={fmtInt(data.videos_24h)}
+                delta={videosDelta}
+              />
+              <PipelineMetric
+                label="IDS-passing"
+                value={fmtInt(data.videos_ids_pass_24h)}
+                delta={idsPassDelta}
+                sub={
+                  data.videos_24h && data.videos_ids_pass_24h != null
+                    ? `${Math.round(
+                        (data.videos_ids_pass_24h / data.videos_24h) * 100,
+                      )}% pass`
+                    : undefined
+                }
+              />
+              <PipelineMetric
+                label="Outbound L0-L8"
+                value={fmtInt(data.outbound_used_24h)}
+                delta={outboundDelta}
+                sub="active sales pipeline"
+              />
+            </div>
+
+            <div className="mt-6">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">
+                Recent A/B Runs
+              </div>
+              {data.recent_runs.length === 0 ? (
+                <p className="text-sm text-muted-foreground" data-testid="recent-runs-empty">
+                  {DASH}{" "}
+                  {data.dna_configured
+                    ? "no active A/B runs"
+                    : "DNA service not configured"}
+                </p>
+              ) : (
+                <ul className="space-y-1.5" data-testid="recent-runs-list">
+                  {data.recent_runs.map((r) => (
+                    <li
+                      key={r.run_id}
+                      className="flex items-center justify-between gap-3 p-2 rounded-md border border-card-border text-sm"
+                      data-testid={`recent-run-${r.run_id}`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium truncate">{r.theme || DASH}</div>
+                        <div className="text-xs text-muted-foreground font-mono">
+                          {r.run_id.slice(0, 8)}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Badge
+                          variant="outline"
+                          className="tabular-nums"
+                        >
+                          IDS {r.ids_mean != null ? r.ids_mean.toFixed(2) : DASH}
+                        </Badge>
+                        <Badge variant="outline" className={runStatusBadge(r.status)}>
+                          {r.status}
+                        </Badge>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <AlertOctagon className="h-4 w-4 text-rose-500" />
+              Blockers
+              <Badge variant="secondary" className="ml-1">
+                open · blocker
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {blockersPending ? (
+              <Skeleton lines={3} />
+            ) : blockers.length === 0 ? (
+              <p className="text-sm text-muted-foreground" data-testid="blockers-empty">
+                {DASH} no open blockers across content repos.
+              </p>
+            ) : (
+              <ul className="space-y-1.5" data-testid="blockers-list">
+                {blockers.map((b) => (
+                  <li
+                    key={`${b.repo}-${b.number}`}
+                    className="text-sm flex items-baseline gap-2"
+                  >
+                    <a
+                      href={b.html_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs font-mono text-primary shrink-0 inline-flex items-center gap-1"
+                    >
+                      #{b.number} <ExternalLink className="h-3 w-3" />
+                    </a>
+                    <span className="text-[10px] font-mono text-muted-foreground shrink-0">
+                      {b.repo.split("/")[1]}
+                    </span>
+                    <span className="truncate">{b.title}</span>
+                  </li>
+                ))}
+              </ul>
             )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {!data.dna_configured && (
+        <div className="mt-6 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 text-xs text-muted-foreground">
+          <div className="font-medium text-amber-500 mb-1">
+            momentiq-dna not configured
+          </div>
+          <ul className="space-y-0.5">
+            <li>
+              · Set <code className="font-mono">DNA_API_BASE</code> to enable IDS,
+              bandit, and A/B run KPIs.
+            </li>
+            <li>
+              · Set <code className="font-mono">DNA_NEON_READ_URL</code> to enable
+              24h pipeline volume + GMV Max ROAS.
+            </li>
           </ul>
         </div>
       )}
     </Layout>
+  );
+}
+
+function PipelineMetric({
+  label,
+  value,
+  delta,
+  sub,
+}: {
+  label: string;
+  value: string;
+  delta: number | null;
+  sub?: string;
+}) {
+  return (
+    <div>
+      <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="mt-1 text-2xl font-semibold tabular-nums">{value}</div>
+      <div className="text-xs text-muted-foreground">
+        {delta != null ? (
+          <span
+            className={
+              delta > 0
+                ? "text-emerald-600"
+                : delta < 0
+                ? "text-rose-600"
+                : "text-muted-foreground"
+            }
+          >
+            {delta > 0 ? "+" : ""}
+            {delta}% vs prior 24h
+          </span>
+        ) : (
+          (sub ?? DASH)
+        )}
+      </div>
+    </div>
   );
 }
