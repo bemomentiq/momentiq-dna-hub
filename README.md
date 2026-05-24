@@ -1,105 +1,192 @@
 # momentiq-dna-hub
 
-Operator console + autonomy hub for the **AI Content Platform** powering
-[content.bemomentiq.com](https://content.bemomentiq.com). Spans:
+**DNA Hub** — the operator surface for the
+[`bemomentiq/momentiq-dna`](https://github.com/bemomentiq/momentiq-dna) video
+pipeline. Reads live DNA state (corpus, A/B runs, IDS scoring, Veo spend,
+Thompson bandit), surfaces it through a React control panel, and dispatches
+autonomous agent lanes against the DNA product repos.
+
+This repo is **not** a generic autonomy framework. The reusable template lives
+at [`bemomentiq/autonomy-hub`](https://github.com/bemomentiq/autonomy-hub).
+DNA Hub is a forked, DNA-scoped instance — it knows about themes, IDS, Veo
+3.1, ScriptSage, and the 15 DNA roadmap focus areas, and it dispatches against
+exactly four content-platform repos.
+
+Production: <https://momentiq-dna-hub-2.pplx.app> (Railway).
+Operator runbook: [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
+Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+---
+
+## What it dispatches against
 
 | Repo | Role |
 |---|---|
-| [`bemomentiq/momentiq-dna`](https://github.com/bemomentiq/momentiq-dna) | TikTok Shop UGC corpus, A/B prompt experiments, Thompson bandit, Veo 3.1 calls, indistinguishability scoring |
+| [`bemomentiq/momentiq-dna`](https://github.com/bemomentiq/momentiq-dna) | TikTok Shop UGC corpus, Thompson 8-attr bandit, Veo 3.1 / Vertex / Pollo / Seedance dispatch, IDS scoring, LoRA drift |
+| [`bemomentiq/momentiq-dna-hub`](https://github.com/bemomentiq/momentiq-dna-hub) | This repo — operator console + autonomy dispatcher |
 | [`bemomentiq/momentiq-scriptsage-backend`](https://github.com/bemomentiq/momentiq-scriptsage-backend) | Script + video generation API, Stripe billing, admin/jobs |
 | [`bemomentiq/momentiq-scriptsage-frontend`](https://github.com/bemomentiq/momentiq-scriptsage-frontend) | Creator-facing video creation UI |
-| (`gke-queue`, `image-engine` if/when wired) | Adjacent generation infrastructure |
 
-## Sections
+Every Explorer / Executor / PR-babysitter / Test-debug run targets one of
+these four. Out-of-scope repos (partner-center, anything SID-era) have been
+removed from the dispatch path.
 
-| Route | Surface |
-|---|---|
-| `/` | Content Platform overview — corpus, active A/B, IDS median 7d, Veo spend 7d, ScriptSage throughput, MRR, open issues |
-| `/exec` | Markdown executive brief (topline, promotion candidates, blockers, Veo spend) |
-| `/themes` | Per-theme champion configs (`dna.theme_optimal_configs`) |
-| `/themes/:slug` | Theme drill-down — variants, judge verdicts, lineage, Veo cost/ROI |
-| `/ab-runs` | A/B experiments — running / completed / promoted / rejected, promotion-gate badges |
-| `/scoring` | 5-dimension indistinguishability scorecard + overall hero |
-| `/scriptsage` | Script/video generation throughput, fallback %, error %, job health |
-| `/veo-cost` | Veo 3.1 spend + ROI by theme (7/14/30d) |
-| `/subscriptions` | Active users, MRR, tier mix, top users by credit burn |
-| `/roadmap` | Live GitHub milestones + `epic:*` issue groups across the 4 content repos |
-| `/issues` | Cross-repo GitHub issues (filterable) |
-| `/autonomy` | 5-lane autonomy engine status (Explorer · Executor · PR-babysitter · Test-debug · Consolidation) |
-| `/explorer`, `/fleet`, `/backlog`, `/run/:id` | Operational lanes |
+---
 
 ## Autonomy lanes
 
 | Lane | Trigger | Role |
 |---|---|---|
-| **Explorer** | Cron | Scans the content repos + companion signals, files epic-shaped issues |
-| **Epic-Executor** | Cron / auto-resume | Plans + ships 3–7 related PRs as coordinated epics |
-| **PR-Babysitter** | GitHub webhook | Diagnoses + fixes failing CI, rebases, conditionally merges |
-| **Test-Debug** | Cron (4h) | E2E probes against the AI Content Platform; auto-files findings |
-| **Consolidation** | Cron | Periodic cross-lane reconciliation and digest |
+| **Explorer** | Cron / manual | Scans the 4 content repos, reads live DNA state, files epic-shaped GitHub issues tagged with one of 15 DNA focus areas |
+| **Epic-Executor** | Cron / auto-resume | Plans + ships 3–7 related PRs as a coordinated epic against `momentiq-dna` |
+| **PR-Babysitter** | GitHub webhook (`/api/pr-babysitter/webhook`) | Diagnoses + fixes failing CI on open PRs, rebases, conditionally merges |
+| **Test-Debug** | Cron (4h) | E2E probes against the DNA pipeline; auto-files findings as issues |
+| **Consolidation** | Cron (1h) | Cross-lane reconciliation + Slack digest |
 
-## Environment
+Dispatch path: hub → SSH tunnel → mini (`mini-4` or `mini-5` per
+`server/explorer/direct-targets.ts`) → `claude` or `codex` CLI inline. The
+GKE codex-lane path is **not** wired in this instance — direct-SSH-to-mini is
+the only live target. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) §2
+for the full dispatch flow.
 
-Both env vars and `cron_config` DB columns are honored (env wins). DB lets
-operators flip URLs without redeploys, via the autonomy page.
+---
 
-| Env var | DB column | Purpose |
+## Page → API → data source map
+
+| Route | API | Upstream |
 |---|---|---|
-| `DNA_API_BASE` | `dna_api_base` | momentiq-dna service base URL |
-| `DNA_API_TOKEN` | `dna_api_token` | optional bearer for DNA |
-| `SCRIPTSAGE_API_BASE` | `scriptsage_api_base` | scriptsage-backend base URL |
-| `SCRIPTSAGE_API_TOKEN` | `scriptsage_api_token` | optional bearer for ScriptSage |
-| `GKE_QUEUE_API_BASE` | `gke_queue_api_base` | adjacent prod (optional) |
-| `IMAGE_ENGINE_API_BASE` | `image_engine_api_base` | adjacent prod (optional) |
-| `GITHUB_TOKEN` / `GH_TOKEN` | `github_token` | for `/api/gh-issues`, milestones, roadmap |
-| `KALODATA_API_URL` | `companion_site_url` | companion signals + health probe |
-| `SLACK_WEBHOOK_URL` | `slack_webhook_url` | nightly digest sink |
-
-## Content-platform endpoints
-
-| Method | Path | Description |
-|---|---|---|
-| GET | `/api/content-platform/overview` | Aggregated dashboard payload (corpus, A/B, IDS, Veo, ScriptSage, subs) |
-| GET | `/api/content-platform/themes` | `dna.theme_optimal_configs` proxy |
-| GET | `/api/content-platform/themes/:slug` | Per-theme variants + lineage |
-| GET | `/api/content-platform/ab-runs?status=&limit=` | A/B runs (filterable) |
-| GET | `/api/content-platform/ids-distribution?window_days=7` | 5-dimension IDS distribution |
-| GET | `/api/content-platform/veo-cost?window_days=7\|14\|30` | Veo spend + ROI per theme |
-| GET | `/api/content-platform/scriptsage` | ScriptSage throughput + jobs |
-| GET | `/api/content-platform/subscriptions` | MRR, active users, tier mix |
-| GET | `/api/content-platform/roadmap` | Live GitHub milestones + epic groups |
-| GET | `/api/content-platform/promotion-candidates` | A/B runs clearing IDS≥0.85 + Δ≥0.10 |
-| GET | `/api/content-platform/health` | Live reachability probes (DNA · ScriptSage · Kalodata) |
-| GET | `/api/content-platform/cache` | Cache introspection |
-| POST | `/api/content-platform/cache/bust?prefix=` | Bust cache (all or prefixed) |
+| `/` (Overview) | `/api/overview/dna-kpis`, `/api/content-platform/overview` | DNA + ScriptSage + Neon |
+| `/exec` (Executive brief) | `/api/overview/dna-kpis`, `/api/content-platform/promotion-candidates` | DNA |
+| `/themes`, `/themes/:slug` | `/api/content-platform/themes[/:slug]` | DNA `dna.theme_optimal_configs` |
+| `/ab-runs` | `/api/content-platform/ab-runs?status=` | DNA |
+| `/scoring` | `/api/content-platform/ids-distribution?window_days=` | DNA |
+| `/bandit` | `/api/content-platform/bandit/{state,learning-metrics,regret}` | DNA Thompson posteriors |
+| `/scriptsage` | `/api/content-platform/scriptsage[/failures\|/errors\|/funnel\|/queue-health]` | ScriptSage backend |
+| `/veo-cost` | `/api/content-platform/veo-cost?window_days=` | DNA |
+| `/subscriptions` | `/api/content-platform/subscriptions` | ScriptSage backend |
+| `/pipeline` | `/api/data-pipeline/stages` | local (7-stage canonical roadmap) |
+| `/pipeline-health` | `/api/content-platform/health` | live probes (DNA · ScriptSage · Kalodata) |
+| `/roadmap` | `/api/content-platform/roadmap` | GitHub milestones + `epic:*` labels |
+| `/issues` | `/api/gh-issues?state=&labels=` | GitHub Issues API |
+| `/hitl` | `/api/hitl/queue`, `/api/hitl/burden` | local sqlite |
+| `/autonomy`, `/fleet`, `/backlog`, `/explorer`, `/run` | `/api/autonomy/*`, `/api/fleet/*` | local sqlite (run state) |
 
 All upstream reads are wrapped in a 30–60s in-process TTL cache so the hub
 doesn't hammer DNA / ScriptSage on every page load. Null upstream results
-get a shorter 10s negative TTL.
+get a shorter 10s negative TTL. Cache introspection at
+`/api/content-platform/cache`; bust with
+`POST /api/content-platform/cache/bust?prefix=`.
 
-## Local dev
+---
+
+## Local development
 
 ```bash
 npm install
 npm run dev   # express + Vite on :5000
 ```
 
-`DATABASE_URL` is optional — better-sqlite3 will create a local file if unset.
-Without `DNA_API_BASE` / `SCRIPTSAGE_API_BASE` set, the hub still boots and
-each section renders an "(not configured)" empty-state instead of crashing.
+`DATABASE_URL` is optional — better-sqlite3 will create a local `data.db` if
+unset. Without `DNA_API_BASE` / `SCRIPTSAGE_API_BASE` set, the hub still
+boots and each section renders an "(not configured)" empty state instead of
+crashing.
 
-## Architecture
+Typecheck, build, E2E:
+
+```bash
+npm run check        # tsc
+npm run build        # tsx script/build.ts — server bundle + Vite client
+npm run test:e2e     # Playwright
+npm run smoke        # tsx scripts/smoke-test.ts
+```
+
+---
+
+## Environment
+
+Both env vars and `cron_config` DB columns are honored (env wins). The DB
+column path lets operators flip URLs without redeploys, via the autonomy
+page. See [`docs/RUNBOOK.md`](docs/RUNBOOK.md) §2 for the full list with
+rotation procedures.
+
+| Env var | DB column | Purpose |
+|---|---|---|
+| `HUB_TOKEN` | — | Shared secret enforced on `/api/*` via `X-Hub-Token` header (required in prod) |
+| `GH_PAT` / `GH_TOKEN` / `GITHUB_TOKEN` | `github_token` | GitHub access for issues, roadmap, PR-babysitter (required) |
+| `SENTRY_DSN` | — | Error capture (recommended) |
+| `DATABASE_URL` | — | Postgres URL; falls back to local sqlite (`data.db`) when unset |
+| `DNA_API_BASE` | `dna_api_base` | momentiq-dna service base URL |
+| `DNA_API_TOKEN` | `dna_api_token` | optional bearer for DNA |
+| `SCRIPTSAGE_API_BASE` | `scriptsage_api_base` | scriptsage-backend base URL |
+| `SCRIPTSAGE_API_TOKEN` | `scriptsage_api_token` | optional bearer for ScriptSage |
+| `KALODATA_API_URL` | `companion_site_url` | companion signals + health probe |
+| `SLACK_WEBHOOK_URL` | `slack_webhook_url` | nightly digest sink |
+
+---
+
+## Repo layout
 
 - `server/` — Express + better-sqlite3. `routes.ts` is the single mount
-  point; `clients/{dna,scriptsage,health,cache}.ts` wrap upstream services.
+  point; `clients/{dna,scriptsage,health,cache,dna-kpis}.ts` wrap upstream
+  services with TTL caching.
+- `server/explorer/` — the five autonomy lanes (Explorer, Executor /
+  fleet-routes, PR-babysitter, test-debug, consolidation) plus the direct
+  SSH dispatch path (`direct-dispatch.ts`, `direct-ssh.ts`,
+  `direct-targets.ts`, `cascade-dispatch.ts`).
 - `client/` — Vite + React 18 + TanStack Query + shadcn/ui + wouter (hash
   routing for static-host friendliness).
 - `shared/schema.ts` — Drizzle table definitions (sqlite dialect).
-- `server/explorer/`, `server/digest.ts` — autonomy engine + Slack digest.
+- `shared/dna-focus-areas.ts` — the 15 canonical DNA roadmap focus areas
+  that all Explorer findings + draft tasks must tag.
+- `shared/dna-pipeline-stages.ts` — the canonical 7-stage DNA pipeline
+  surfaced on `/pipeline`.
+
+---
+
+## Contributing
+
+For agents (Claude Code, codex, aider, etc.) — read
+[`AGENTS.md`](AGENTS.md) and [`CLAUDE.md`](CLAUDE.md) first. They define
+the in-scope skills, repos, and conventions for this hub.
+
+For humans:
+
+1. Pick (or file) an issue in `bemomentiq/momentiq-dna-hub`. Hub-side work
+   is tagged `area:hub`; DNA-product work belongs in
+   `bemomentiq/momentiq-dna`.
+2. Keep changes scoped — one concern per PR. The Explorer/Executor lanes
+   actively file PRs; humans rebasing on top of them is friction.
+3. Match the conventional-commit / `[PREFIX-N]` style visible in
+   `git log --oneline`.
+4. `npm run check && npm run test:e2e` before pushing.
+5. Update [`docs/RUNBOOK.md`](docs/RUNBOOK.md) in the same PR if you change
+   operator behavior, env vars, or dashboards.
+
+---
 
 ## Deploy
 
-The hub runs anywhere Node 20+ runs. We currently host on
-[pplx.app](https://momentiq-dna-hub.pplx.app). Set the env vars above (or
-edit the `cron_config` table directly), wire the GitHub webhook at
-`/api/pr-babysitter/webhook`, and you're done.
+The hub runs anywhere Node 20+ runs. Production is Railway with deploys
+triggered by `git push origin main`. Build is `tsx script/build.ts` (server
+bundle to `dist/index.cjs` + Vite client build); `npm start` runs the
+production node entrypoint. Full deploy + rollback procedure in
+[`docs/RUNBOOK.md`](docs/RUNBOOK.md) §3–4.
+
+After deploy, smoke-test:
+
+```bash
+curl -sS https://momentiq-dna-hub-2.pplx.app/api/health | jq
+curl -sS -H "X-Hub-Token: $HUB_TOKEN" \
+  https://momentiq-dna-hub-2.pplx.app/api/autonomy/queue | jq '. | length'
+```
+
+---
+
+## Out of scope
+
+- Generic autonomy-hub framework features (those land in
+  `bemomentiq/autonomy-hub`).
+- Public-facing creator docs (creator UI lives in
+  `momentiq-scriptsage-frontend`).
+- Partner-center, SID-era endpoints, and any non-DNA product surfaces —
+  removed during the DNA content-platform redesign (see merged PR history).
