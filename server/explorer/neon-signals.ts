@@ -141,8 +141,3 @@ export async function fetchLiveSignals(): Promise<FetchSignalsResult> {
     }
   }
 }
-
-/** Expose cache age in seconds — useful for diagnostics. */
-export function signalsCacheAgeSeconds(): number {
-  return cacheTimestamp ? Math.round((Date.now() - cacheTimestamp) / 1000) : -1;
-}
