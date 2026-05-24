@@ -46,12 +46,6 @@ export const PROVIDER_MODELS: Record<Provider, string> = {
   claude: "claude_opus_4_7",
 };
 
-// Full target matrix: mini × provider
-export const DIRECT_TARGETS: Record<MiniId, Record<Provider, string>> = {
-  "mini-4": { codex: "gpt_5_5", claude: "claude_opus_4_7" },
-  "mini-5": { codex: "gpt_5_5", claude: "claude_opus_4_7" },
-};
-
 // ---------------------------------------------------------------------------
 // Cascade helpers
 // ---------------------------------------------------------------------------

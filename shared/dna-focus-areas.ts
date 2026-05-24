@@ -1,5 +1,3 @@
-import { z } from "zod";
-
 // ============ DNA Roadmap FOCUS_AREAs ============
 // The 15 work units carried by the mcc-roadmap-specialist-dna skill.
 // Explorer findings are tagged with one of these so the Explorer UI can
@@ -31,14 +29,6 @@ export const DNA_FOCUS_AREAS: readonly DnaFocusArea[] = [
 ] as const;
 
 export const FOCUS_AREA_IDS = DNA_FOCUS_AREAS.map((a) => a.id) as readonly string[];
-
-// Zod-friendly union (string with refinement so we don't have to use z.enum
-// with a tuple — that's awkward to derive from a const array).
-export const focusAreaSchema = z
-  .string()
-  .refine((v) => (FOCUS_AREA_IDS as readonly string[]).includes(v), {
-    message: `focus_area must be one of: ${FOCUS_AREA_IDS.join(", ")}`,
-  });
 
 export const UNCATEGORIZED_FOCUS_AREA = "(uncategorized)";
 
