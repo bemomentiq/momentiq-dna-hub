@@ -26,6 +26,16 @@ const checks: Check[] = [
         : "missing dna_configured/scriptsage_configured booleans",
   },
   {
+    name: "overview/dna-kpis",
+    path: "/api/overview/dna-kpis",
+    shape: (b: any) =>
+      typeof b?.dna_configured === "boolean" &&
+      typeof b?.ids_target === "number" &&
+      Array.isArray(b?.recent_runs)
+        ? null
+        : "missing dna_configured/ids_target/recent_runs",
+  },
+  {
     name: "content-platform/health",
     path: "/api/content-platform/health",
     shape: (b: any) =>

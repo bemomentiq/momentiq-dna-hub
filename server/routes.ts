@@ -17,6 +17,7 @@ import { buildDigestMarkdown } from "./digest";
 import { hubAuth } from "./middleware/auth";
 import { registerHealthRoutes } from "./health";
 import { dnaClient } from "./clients/dna";
+import { getDnaKpis } from "./clients/dna-kpis";
 import { scriptsageClient } from "./clients/scriptsage";
 import { checkDnaHealth, checkScriptsageHealth, checkKalodataHealth } from "./clients/health";
 import { cacheStats, cacheBust } from "./clients/cache";
@@ -316,6 +317,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
 
     res.json({ milestones, epics, repos, errors, fetched_at: new Date().toISOString() });
+  });
+
+  // DNA-actual KPIs for the Overview + ExecutiveBrief pages. Aggregates IDS
+  // convergence, bandit M11 progress, win-rate, GMV Max ROAS, 24h pipeline
+  // volume, and outbound usage from dnaClient + optional Neon. Wrapped in a
+  // 5-minute TTL cache inside getDnaKpis().
+  app.get("/api/overview/dna-kpis", async (_req, res) => {
+    res.json(await getDnaKpis());
   });
 
   // Content-platform overview: aggregates dna corpus + A/B activity + ScriptSage
