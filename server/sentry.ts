@@ -1,4 +1,4 @@
-import type { Express, Request, Response, NextFunction } from "express";
+import type { Express } from "express";
 import * as Sentry from "@sentry/node";
 
 let initialized = false;
@@ -21,12 +21,6 @@ export function initSentry(): boolean {
   initialized = true;
   console.log("[sentry] initialized");
   return true;
-}
-
-export function sentryRequestHandler() {
-  return function (_req: Request, _res: Response, next: NextFunction) {
-    next();
-  };
 }
 
 export function installSentryErrorHandler(app: Express): void {
