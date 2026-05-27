@@ -1,23 +1,20 @@
-// 4-way fallback cascade orchestrator for Autonomy Hub direct-dispatch.
+// Fleet dispatch orchestrator for cron-triggered Explorer / Executor / Audit /
+// Test-Debug runs.
 //
-// Replaces the CC bulk-queue path for cron-triggered Explorer + Executor runs.
-// Ad-hoc /api/run/dispatch can still use CC or the pin-*-direct path.
-//
-// Cascade order (per AH-DIRECT-CASCADE spec):
-//   0. mini-4 + requested provider      (primary)
-//   1. mini-5 + same provider           (other mini, same provider)
-//   2. mini-4 + other provider          (same mini, other provider)
-//   3. mini-5 + other provider          (full fallback)
-//
-// On success the direct_marker format is:
-//   agentId=<mini>;provider=<provider>;pid=<N>;workdir=<path>;cascade_index=<0..3>
-// This lets /api/autonomy/status show which fallback level was used.
+// HISTORY: this module used to run a 4-way SSH fallback cascade across
+// mini-4/mini-5 × codex/claude. That direct-SSH path broke when CC migrated
+// off the Mac Minis onto GKE Codex Lanes (gke-codex-lane-1..13). It now routes
+// every run through CC's task queue (project 14920) via ./cc-dispatch, and CC
+// schedules the work onto a GKE codex-lane. The public surface
+// (dispatchWithCascade + the marker / stats helpers) is unchanged so callers in
+// fleet-routes / explorer routes / test-debug / server routes are untouched.
 
-import { cascadeFor, defaultTarget, type MiniId, type Provider } from "./direct-targets";
-import { spawnOnMini } from "./direct-ssh";
+import { postTask, PROVIDER_MODELS, type Provider } from "./cc-dispatch";
+
+const DEFAULT_REPO_URL = "https://github.com/bemomentiq/momentiq-dna";
 
 export interface CascadeAttempt {
-  target: { mini: MiniId; provider: Provider };
+  target: { provider: Provider; lane?: string };
   result: "ok" | "fail";
   error?: string;
 }
@@ -27,7 +24,9 @@ export interface CascadeDispatchOpts {
   runId: number;
   briefing: string;
   preferredProvider?: Provider;
-  preferredMini?: MiniId;
+  /** Legacy hint (was the target Mini); ignored now that CC schedules the lane. */
+  preferredMini?: string;
+  repoUrl?: string;
   hubStatusUrl: string;
   ccApiUrl: string;
   ccApiKey: string;
@@ -35,81 +34,67 @@ export interface CascadeDispatchOpts {
 
 export interface CascadeDispatchResult {
   ok: boolean;
-  finalTarget?: { mini: MiniId; provider: Provider };
-  cascadeIndex?: number;   // 0-3 — which fallback level succeeded
+  finalTarget?: { provider: Provider; lane?: string };
+  cascadeIndex?: number; // retained for API back-compat; always 0 on the CC path
   attempts: CascadeAttempt[];
-  pid?: number;
-  workdir?: string;
+  ccTaskId?: number;
+  pid?: number; // legacy field — undefined on the CC path
+  workdir?: string; // legacy field — undefined on the CC path
   model?: string;
   credentialId?: number;
   leasedEmail?: string;
-  directMarker?: string;   // stored in direct_marker column
+  directMarker?: string; // stored in direct_marker; now carries cc_task_id
   error?: string;
 }
 
 /**
- * Attempt to spawn a run through the 4-way fallback cascade.
+ * Dispatch a run by enqueuing a CC task tagged with the DNA project id.
  *
- * Tries each target in cascade order; stops and returns on the first
- * successful spawn. If all 4 targets fail, returns ok=false with all
- * attempt errors.
+ * Replaces the old SSH cascade: CC owns lane selection + resilience, so there
+ * is a single attempt here. The chosen provider maps to a CC executor pin
+ * (codex → pin-codex / gpt_5_5, claude → pin-claude / opus).
  */
 export async function dispatchWithCascade(
   opts: CascadeDispatchOpts,
 ): Promise<CascadeDispatchResult> {
-  const primary = {
-    mini: opts.preferredMini ?? defaultTarget().mini,
-    provider: opts.preferredProvider ?? defaultTarget().provider,
-  };
-  const cascade = cascadeFor(primary);
+  const provider: Provider = opts.preferredProvider ?? "codex";
   const attempts: CascadeAttempt[] = [];
 
-  for (let i = 0; i < cascade.length; i++) {
-    const target = cascade[i];
-    const spawnResult = await spawnOnMini({
-      mini: target.mini,
-      provider: target.provider,
-      briefing: opts.briefing,
-      runId: opts.runId,
-      hubStatusUrl: opts.hubStatusUrl,
-      ccApiUrl: opts.ccApiUrl,
-      ccApiKey: opts.ccApiKey,
-    });
+  const posted = await postTask({
+    ccApiUrl: opts.ccApiUrl,
+    ccApiKey: opts.ccApiKey,
+    title: `[AH-${opts.kind.toUpperCase()}-R${opts.runId}] ${opts.kind} run`,
+    description: `Autonomy Hub ${opts.kind} run #${opts.runId} dispatched to a GKE codex-lane via CC. Progress is reported back to ${opts.hubStatusUrl}.`,
+    briefing: opts.briefing,
+    repoUrl: opts.repoUrl ?? DEFAULT_REPO_URL,
+    provider,
+    priority: opts.kind === "executor" ? "p1" : "p2",
+  });
 
-    attempts.push({
-      target,
-      result: spawnResult.ok ? "ok" : "fail",
-      error: spawnResult.error,
-    });
+  attempts.push({
+    target: { provider },
+    result: posted.ok ? "ok" : "fail",
+    error: posted.error,
+  });
 
-    if (spawnResult.ok) {
-      const directMarker = buildDirectMarker({
-        mini: target.mini,
-        provider: target.provider,
-        pid: spawnResult.pid,
-        workdir: spawnResult.workdir ?? "",
-        cascadeIndex: i,
-      });
-
-      return {
-        ok: true,
-        finalTarget: target,
-        cascadeIndex: i,
-        attempts,
-        pid: spawnResult.pid,
-        workdir: spawnResult.workdir,
-        model: spawnResult.model,
-        credentialId: spawnResult.credentialId,
-        leasedEmail: spawnResult.leasedEmail,
-        directMarker,
-      };
-    }
+  if (!posted.ok) {
+    return { ok: false, attempts, error: `CC dispatch failed: ${posted.error}` };
   }
 
+  const directMarker = buildDirectMarker({
+    provider,
+    ccTaskId: posted.ccTaskId,
+    cascadeIndex: 0,
+  });
+
   return {
-    ok: false,
+    ok: true,
+    finalTarget: { provider },
+    cascadeIndex: 0,
     attempts,
-    error: `All 4 cascade targets failed. Attempts: ${attempts.map((a) => `${a.target.mini}/${a.target.provider}: ${a.error}`).join("; ")}`,
+    ccTaskId: posted.ccTaskId,
+    model: posted.model ?? PROVIDER_MODELS[provider],
+    directMarker,
   };
 }
 
@@ -119,23 +104,22 @@ export async function dispatchWithCascade(
 
 /**
  * Build the direct_marker string stored on fleet_runs / explorer_runs.
- * Format: agentId=<mini>;provider=<provider>;pid=<N>;workdir=<path>;cascade_index=<0..3>
+ * Format: agentId=<lane>;provider=<provider>;cc_task_id=<id>;cascade_index=0
  *
- * Exported so routes.ts can parse it for /api/autonomy/status cascade_stats.
+ * (Older rows used pid=/workdir= from the SSH path; parseDirectMarker still
+ * reads those for historical runs.)
  */
 export function buildDirectMarker(opts: {
-  mini: MiniId;
   provider: Provider;
-  pid?: number;
-  workdir: string;
-  cascadeIndex: number;
+  ccTaskId?: number;
+  agentId?: string;
+  cascadeIndex?: number;
 }): string {
   return [
-    `agentId=${opts.mini}`,
+    `agentId=${opts.agentId ?? "cc"}`,
     `provider=${opts.provider}`,
-    `pid=${opts.pid ?? "unknown"}`,
-    `workdir=${opts.workdir}`,
-    `cascade_index=${opts.cascadeIndex}`,
+    `cc_task_id=${opts.ccTaskId ?? "unknown"}`,
+    `cascade_index=${opts.cascadeIndex ?? 0}`,
   ].join(";");
 }
 
@@ -146,6 +130,7 @@ export function buildDirectMarker(opts: {
 export function parseDirectMarker(marker: string | null | undefined): {
   agentId: string;
   provider: string;
+  ccTaskId: number | null;
   pid: number | null;
   workdir: string;
   cascadeIndex: number;
@@ -157,15 +142,16 @@ export function parseDirectMarker(marker: string | null | undefined): {
   };
   const agentId = get("agentId");
   const provider = get("provider");
-  const workdir = get("workdir");
-  if (!agentId || !provider || !workdir) return null;
+  if (!agentId || !provider) return null;
   const pidStr = get("pid");
+  const ccStr = get("cc_task_id");
   const idxStr = get("cascade_index");
   return {
     agentId,
     provider,
+    ccTaskId: ccStr && ccStr !== "unknown" ? parseInt(ccStr, 10) : null,
     pid: pidStr && pidStr !== "unknown" ? parseInt(pidStr, 10) : null,
-    workdir,
+    workdir: get("workdir") ?? "",
     cascadeIndex: idxStr ? parseInt(idxStr, 10) : 0,
   };
 }
@@ -182,8 +168,9 @@ export interface CascadeStats {
 }
 
 /**
- * Compute cascade_stats from the last N direct_marker strings.
- * Counts how many runs landed on each mini×provider combination.
+ * Compute cascade_stats from a set of direct_marker strings. Counts how many
+ * historical runs landed on each (legacy) mini×provider combination. New runs
+ * land on CC-scheduled GKE lanes and no longer contribute to these counts.
  */
 export function computeCascadeStats(markers: Array<string | null | undefined>): CascadeStats {
   const stats: CascadeStats = { mini4_codex: 0, mini4_claude: 0, mini5_codex: 0, mini5_claude: 0 };
