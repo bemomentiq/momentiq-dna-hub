@@ -6,6 +6,7 @@
 
 import type { DraftTask } from "@shared/schema";
 import { storage } from "../storage";
+import { ALLOWED_REPOS, isAllowedRepo } from "@shared/allowed-repos";
 
 // Repo mapping
 export function pickRepoForTask(t: DraftTask, cfg: { default_gh_repo: string; frontend_gh_repo: string }): string {
@@ -330,6 +331,11 @@ export type GhIssueResult = { ok: boolean; number?: number; url?: string; error?
 export async function createSoloIssueForTask(t: DraftTask, ctx: { source_url: string; run_id: number }): Promise<GhIssueResult> {
   const cfg = storage.getCronConfig();
   const repo = t.gh_repo ?? pickRepoForTask(t, { default_gh_repo: cfg.default_gh_repo, frontend_gh_repo: cfg.frontend_gh_repo });
+  // DNA-9: never file to an off-scope repo. Skip with a logged warning.
+  if (!isAllowedRepo(repo)) {
+    console.warn(`[github-sync] skipping draft #${t.id}: repo "${repo}" not in DNA allow-list (${ALLOWED_REPOS.join(", ")})`);
+    return { ok: false, error: `repo_not_allowed: ${repo}` };
+  }
   const area = inferArea(t);
   const labels = ["autonomy-hub", `priority:${t.priority}`, `area:${area}`];
   const body = renderSoloIssueBody(t, ctx);
@@ -368,6 +374,11 @@ export async function createBatchedFleetTracker(group: BatchGroup, ctx: { source
 }> {
   const cfg = storage.getCronConfig();
   const repo = group.repo;
+  // DNA-9: never file to an off-scope repo. Skip the whole group with a warning.
+  if (!isAllowedRepo(repo)) {
+    console.warn(`[github-sync] skipping batch group "${group.key}": repo "${repo}" not in DNA allow-list (${ALLOWED_REPOS.join(", ")})`);
+    return { master: { ok: false, error: `repo_not_allowed: ${repo}` }, children: [] };
+  }
   const masterLabels = ["autonomy-hub", "tracker", `priority:${group.priority}`, `area:${group.area}`];
 
   // Build initial master body with placeholder child refs

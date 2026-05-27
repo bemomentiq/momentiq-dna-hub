@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { apiRequest, queryClient as qc } from "@/lib/queryClient";
 import { toast } from "@/hooks/use-toast";
 import { getFocusAreaLabel, UNCATEGORIZED_FOCUS_AREA } from "@shared/dna-focus-areas";
+import { ALLOWED_REPOS } from "@shared/allowed-repos";
 
 type FocusAreaSummary = {
   areas: { id: string; label: string; description: string; count_7d: number }[];
@@ -636,8 +637,8 @@ function SettingsPanel({ cfg, onSave, onToggle }: { cfg: CronConfig; onSave: () 
         <Field label="Max ledger entries" type="number" value={maxLedger} onChange={(v) => setMaxLedger(parseInt(v) || 50)} hint="10-200" />
         <Field label="Max prior summaries" type="number" value={maxSummaries} onChange={(v) => setMaxSummaries(parseInt(v) || 5)} hint="1-20" />
         <Field label="CC API URL" value={ccUrl} onChange={setCcUrl} />
-        <Field label="Backend repo" value={defaultRepo} onChange={setDefaultRepo} hint="owner/name" />
-        <Field label="Frontend repo" value={frontendRepo} onChange={setFrontendRepo} hint="owner/name" />
+        <RepoSelect label="Backend repo" value={defaultRepo} onChange={setDefaultRepo} hint="DNA-scoped" />
+        <RepoSelect label="Frontend repo" value={frontendRepo} onChange={setFrontendRepo} hint="DNA-scoped" />
         <Field label="Batch min siblings" type="number" value={batchMin} onChange={(v) => setBatchMin(parseInt(v) || 2)} hint="merge groups ≥ N" />
         <Field
           label={cfg.has_github_token
@@ -741,6 +742,23 @@ function Field({ label, value, onChange, type = "text", hint }: { label: string;
     <label className="text-xs">
       <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">{label}{hint && <span className="ml-1 normal-case font-normal">· {hint}</span>}</div>
       <input value={value} onChange={(e) => onChange(e.target.value)} type={type} className="w-full px-2 py-1.5 rounded-md border border-input bg-background text-sm" />
+    </label>
+  );
+}
+
+// DNA-9: planning repos are locked to the allow-list, so the repo picker is a
+// constrained <select> instead of a free-text field. A legacy / off-scope value
+// still renders as a disabled option so the field never looks empty before the
+// operator re-saves it back into scope.
+function RepoSelect({ label, value, onChange, hint }: { label: string; value: string; onChange: (v: string) => void; hint?: string }) {
+  const offScope = !!value && !(ALLOWED_REPOS as readonly string[]).includes(value);
+  return (
+    <label className="text-xs">
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">{label}{hint && <span className="ml-1 normal-case font-normal">· {hint}</span>}</div>
+      <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full px-2 py-1.5 rounded-md border border-input bg-background text-sm">
+        {ALLOWED_REPOS.map((r) => <option key={r} value={r}>{r}</option>)}
+        {offScope && <option value={value} disabled>{value} (off-scope)</option>}
+      </select>
     </label>
   );
 }
