@@ -6,7 +6,7 @@ import type { Express } from "express";
 import { z } from "zod";
 import { storage } from "../storage";
 import { isDirectExecutor, spawnDirectAgent, pollDirectRun, reapDeadDirectRuns, DIRECT_TARGETS, type DirectExecutor } from "./direct-dispatch";
-import { dispatchWithCascade } from "./cascade-dispatch";
+import { dispatchWithCascade, parseDirectMarker } from "./cascade-dispatch";
 import { buildFluidLoopContext } from "./fluid-loop";
 
 // ============ Briefing builders ============
@@ -673,9 +673,10 @@ export function registerFleetRoutes(app: Express) {
       }
       storage.updateFleetRun(newRun.id, {
         status: "running",
-        direct_marker: spawn.pid ? `agentId=${spawn.agentId};pid=${spawn.pid};workdir=${spawn.workdir}` : null,
+        cc_task_id: spawn.ccTaskId ?? null,
+        direct_marker: spawn.directMarker ?? null,
       } as any);
-      return void res.json({ ok: true, run: newRun, executor, direct: true, parent_run_id: original.id });
+      return void res.json({ ok: true, run: newRun, executor, direct: true, cc_task_id: spawn.ccTaskId, parent_run_id: original.id });
     }
 
     // CC queue path (executor_cron or ad_hoc non-direct)
@@ -975,10 +976,12 @@ export function registerFleetRoutes(app: Express) {
         storage.updateFleetRun(run.id, { status: "failed", error: spawn.error ?? "spawn failed", finished_at: new Date().toISOString() });
         return void res.status(502).json({ error: "direct spawn failed", detail: spawn.error });
       }
-      // Store direct-dispatch marker in its own column (not in error)
+      // Store the CC task id (and a marker carrying it) so /poll + the reaper
+      // can query CC for this run's progress.
       storage.updateFleetRun(run.id, {
         status: "running",
-        direct_marker: spawn.pid ? `agentId=${spawn.agentId};pid=${spawn.pid};workdir=${spawn.workdir}` : null,
+        cc_task_id: spawn.ccTaskId ?? null,
+        direct_marker: spawn.directMarker ?? null,
       } as any);
       return void res.json({
         ok: true,
@@ -988,8 +991,7 @@ export function registerFleetRoutes(app: Express) {
         direct: true,
         agentId: spawn.agentId,
         agent: spawn.agent,
-        pid: spawn.pid,
-        workdir: spawn.workdir,
+        cc_task_id: spawn.ccTaskId,
       });
     }
 
@@ -1033,18 +1035,15 @@ export function registerFleetRoutes(app: Express) {
     if (!isDirectExecutor(run.executor)) {
       return void res.json({ ok: true, direct: false, message: "not a direct run; nothing to poll" });
     }
-    // Read marker from direct_marker column (preferred) or fall back to legacy error-field marker
+    // Resolve the CC task id from the marker (preferred) or the cc_task_id column.
     const markerStr = (run as any).direct_marker || (run.error?.startsWith("direct:") ? run.error.replace(/^direct:/, "") : "");
-    const marker = markerStr.match(/^agentId=([^;]+);pid=(\d+);workdir=(.+)$/);
-    if (!marker) return void res.json({ ok: true, direct: true, message: "no marker; spawn may have failed" });
-    const [, agentId, pidStr, workdir] = marker;
+    const ccTaskId = parseDirectMarker(markerStr)?.ccTaskId ?? run.cc_task_id ?? null;
+    if (!ccTaskId) return void res.json({ ok: true, direct: true, message: "no CC task id; dispatch may have failed" });
     const cfg = storage.getCronConfig();
     const polled = await pollDirectRun({
       cc_api_url: cfg.cc_api_url,
       cc_api_key: cfg.cc_api_key,
-      agentId,
-      workdir,
-      pid: parseInt(pidStr, 10),
+      ccTaskId,
     });
 
     // Auto-mark completed/failed when the agent has exited (don't make the user click reap).
@@ -1061,7 +1060,7 @@ export function registerFleetRoutes(app: Express) {
         error: finalStatus === "failed" ? polled.stderr_tail.slice(-500) : null,
       } as any);
     }
-    res.json({ direct: true, run_id: id, agentId, workdir, ...polled });
+    res.json({ direct: true, run_id: id, cc_task_id: ccTaskId, ...polled });
   });
 
   // ==================== AUDIT CRON DISPATCH ====================
