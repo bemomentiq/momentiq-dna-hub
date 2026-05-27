@@ -2,7 +2,7 @@
 // Polls every 30s. If auto_resume_{explorer,executor} is enabled in cron_config,
 // and the in-flight count for that kind is below auto_resume_max_concurrent,
 // it auto-dispatches a new run. Each dispatch picks the lane with lowest current
-// load (codex vs claude), and auto-cascades to mini-5 direct on hard failure.
+// load (codex vs claude), and retries via the direct (p0) CC path on hard failure.
 //
 // Idempotent: skips if a dispatch happened in the last auto_resume_min_gap_sec.
 
@@ -180,7 +180,7 @@ async function dispatchOrganizer(): Promise<{ ok: boolean; run_id?: number; erro
   return { ok: r.ok, run_id: r.cc_task_id, error: r.error };
 }
 
-// Cascade: primary CC dispatch → if fails, mini-5 direct-tunnel
+// Cascade: primary CC dispatch → if both lanes fail, retry via the direct (p0) CC path
 async function dispatchWithCascade(kind: Kind): Promise<void> {
   // Consolidation dispatches directly to CC (fire-and-forget) — no fleet cascade needed
   if (kind === "consolidation") {
@@ -224,21 +224,20 @@ async function dispatchWithCascade(kind: Kind): Promise<void> {
     return;
   }
 
-  // Both lanes failed — cascade to mini-5 if enabled
+  // Both primary lanes failed — retry once via the direct (p0) CC path if enabled.
+  // (mini5_fallback_enabled is the legacy column name; this no longer touches a
+  // Mini — the -direct executors re-post the task to CC at p0 to jump the queue.)
   if (!(cfg as any).mini5_fallback_enabled) {
-    console.error(`[auto-resume] ${kind} BOTH lanes failed, mini5 fallback disabled. Giving up this tick.`);
+    console.error(`[auto-resume] ${kind} BOTH lanes failed, direct fallback disabled. Giving up this tick.`);
     return;
   }
 
-  console.warn(`[auto-resume] ${kind} BOTH primary lanes failed; cascading to mini-5 direct-tunnel`);
-  // Use the same endpoints with -direct executor variants which route via SSH-via-CC to mini-5
-  const direct = kind === "explorer" ? "pin-codex-direct" : "pin-codex-direct";
-  const directFb = kind === "explorer" ? "pin-claude-direct" : "pin-claude-direct";
-  const r3 = await fn(direct, directFb);
+  console.warn(`[auto-resume] ${kind} BOTH primary lanes failed; retrying via direct (p0) CC path`);
+  const r3 = await fn("pin-codex-direct", "pin-claude-direct");
   if (r3.ok) {
-    console.log(`[auto-resume] ${kind} mini-5 direct dispatched run_id=${r3.run_id}`);
+    console.log(`[auto-resume] ${kind} direct (p0) dispatched run_id=${r3.run_id}`);
   } else {
-    console.error(`[auto-resume] ${kind} mini-5 direct ALSO failed: ${r3.error}`);
+    console.error(`[auto-resume] ${kind} direct (p0) ALSO failed: ${r3.error}`);
   }
 }
 
