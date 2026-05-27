@@ -59,9 +59,9 @@ export default function Fleet() {
     onError: (err: any) => setStatusMsg(`Trigger failed: ${err.message}`),
   });
 
-  // Reap zombies: ask the backend to scan running direct-tunnel runs, ask their
-  // mini for the agent's exit state, and finalize anything that has actually exited.
-  // This is what unsticks the dashboard when codex/claude on mini-5 has died but
+  // Reap zombies: ask the backend to scan running direct runs, query CC for each
+  // task's state, and finalize anything whose CC task has reached a terminal state.
+  // This is what unsticks the dashboard when a GKE codex-lane task has finished but
   // its run row is still showing 'running' for hours.
   const reapZombies = useMutation({
     mutationFn: async () => {
@@ -90,7 +90,7 @@ export default function Fleet() {
   return (
     <Layout
       title="Fleet Runs"
-      subtitle="Live view of every executor cron + ad-hoc run dispatched to the Mac Mini fleet. Each run plans → executes → opens PR → babysits CI to merge."
+      subtitle="Live view of every executor cron + ad-hoc run dispatched to the GKE codex-lane fleet via CC. Each run plans → executes → opens PR → babysits CI to merge."
       actions={
         <div className="flex items-center gap-2">
           <button
@@ -103,7 +103,7 @@ export default function Fleet() {
           <button
             onClick={() => reapZombies.mutate()}
             disabled={reapZombies.isPending}
-            title="Scan running direct-tunnel runs and finalize ones whose agent has exited on mini-5"
+            title="Scan running direct runs and finalize ones whose CC task has reached a terminal state"
             className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border border-amber-500/40 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10 disabled:opacity-50"
           >
             <Trash2 className="h-3.5 w-3.5" /> {reapZombies.isPending ? "Reaping…" : "Reap zombies"}
@@ -173,8 +173,8 @@ function RunRow({ run }: { run: FleetRun }) {
     onError: (err: any) => toast({ title: "Replay failed", description: err.message, variant: "destructive" }),
   });
   const issues: number[] = (() => { try { return JSON.parse(run.gh_issue_numbers_json || "[]"); } catch { return []; } })();
-  // Direct-tunnel runs bypass the CC FIFO queue and run concurrently on mini-5.
-  // Surface this on the row so it's obvious which path a run took.
+  // Direct runs are dispatched at p0 so they jump the CC FIFO queue onto a GKE
+  // codex-lane. Surface this on the row so it's obvious which path a run took.
   const isDirect = run.executor === "pin-codex-direct" || run.executor === "pin-claude-direct";
   // Long-running runs (>20 min still 'running') are almost certainly zombies.
   const ageSec = !run.finished_at ? Math.round((Date.now() - new Date(run.started_at).getTime()) / 1000) : 0;
@@ -187,7 +187,7 @@ function RunRow({ run }: { run: FleetRun }) {
           <span className="text-[10px] font-mono text-muted-foreground">#{run.id}</span>
           <span className={cn("text-[10px] uppercase font-semibold tracking-wide px-2 py-0.5 rounded border", STATUS_COLORS[run.status])}>{run.status}</span>
           {isDirect && (
-            <span title="Direct tunnel — ran on mini-5 outside CC's FIFO queue" className="text-[10px] uppercase font-semibold tracking-wide px-1.5 py-0.5 rounded border border-violet-500/40 bg-violet-500/10 text-violet-700 dark:text-violet-400 inline-flex items-center gap-1">
+            <span title="Direct (p0) — jumped the CC queue onto a GKE codex-lane" className="text-[10px] uppercase font-semibold tracking-wide px-1.5 py-0.5 rounded border border-violet-500/40 bg-violet-500/10 text-violet-700 dark:text-violet-400 inline-flex items-center gap-1">
               <Zap className="h-3 w-3" /> direct
             </span>
           )}

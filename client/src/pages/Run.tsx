@@ -73,7 +73,7 @@ export default function Run() {
       return r.json();
     },
     onSuccess: (data) => {
-      const where = data.direct ? `${data.agentId} (direct, pid ${data.pid})` : `CC task ${data.cc_task_id}`;
+      const where = data.direct ? `direct → CC task ${data.cc_task_id}` : `CC task ${data.cc_task_id}`;
       setStatusMsg(`Dispatched run #${data.run.id} on ${data.model_pin} → ${where}`);
       setPrompt("");
       queryClient.invalidateQueries({ queryKey: ["/api/fleet/runs"] });
@@ -95,7 +95,7 @@ export default function Run() {
   return (
     <Layout
       title="Run on Fleet"
-      subtitle="Dispatch ad-hoc tasks to the local Mac Mini fleet. p0 = jumps the queue and runs concurrent even if lanes are busy. Each run gets full repo context + skills auto-injected."
+      subtitle="Dispatch ad-hoc tasks to the GKE codex-lane fleet via CC. p0 = jumps the queue and runs concurrent even if lanes are busy. Each run gets full repo context + skills auto-injected."
       actions={
         <button
           onClick={() => refetch()}
@@ -137,9 +137,9 @@ export default function Run() {
             </Field>
             <Field label="Executor (pinned model)">
               <select value={executor} onChange={(e) => setExecutor(e.target.value as any)} className="w-full px-2 py-1.5 rounded-md border border-input bg-background text-sm">
-                <optgroup label="Direct (mini-5, concurrent to CC)">
-                  <option value="pin-codex-direct">pin-codex-direct · gpt_5_5 · mini-5</option>
-                  <option value="pin-claude-direct">pin-claude-direct · claude_opus_4_7 · mini-5</option>
+                <optgroup label="Direct (p0, jumps the CC queue)">
+                  <option value="pin-codex-direct">pin-codex-direct · gpt_5_5 · GKE lane</option>
+                  <option value="pin-claude-direct">pin-claude-direct · claude_opus_4_7 · GKE lane</option>
                 </optgroup>
                 <optgroup label="CC queue (FIFO, may wait)">
                   <option value="pin-codex">pin-codex · gpt_5_5</option>
@@ -204,7 +204,7 @@ function RunRow({ run, onCancel }: { run: FleetRun; onCancel: () => void }) {
             {run.priority}
           </span>
           {isDirect && (
-            <span title="Direct tunnel — spawned on mini-5 outside CC's FIFO queue" className="text-[10px] uppercase font-semibold tracking-wide px-1.5 py-0.5 rounded border border-violet-500/40 bg-violet-500/10 text-violet-700 dark:text-violet-400 inline-flex items-center gap-1">
+            <span title="Direct (p0) — jumps the CC queue onto a GKE codex-lane" className="text-[10px] uppercase font-semibold tracking-wide px-1.5 py-0.5 rounded border border-violet-500/40 bg-violet-500/10 text-violet-700 dark:text-violet-400 inline-flex items-center gap-1">
               <Zap className="h-3 w-3" /> direct
             </span>
           )}
@@ -284,7 +284,7 @@ function LiveTail({ runId, status }: { runId: number; status: string }) {
   return (
     <div>
       <div className="flex items-center gap-2 mb-1">
-        <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Live tail (mini-5 direct)</div>
+        <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Live tail (CC task)</div>
         {isFetching && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
         {data?.alive && <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">alive</span>}
         {data?.exited && <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">exited</span>}
