@@ -43,11 +43,12 @@ removed from the dispatch path.
 | **Test-Debug** | Cron (4h) | E2E probes against the DNA pipeline; auto-files findings as issues |
 | **Consolidation** | Cron (1h) | Cross-lane reconciliation + Slack digest |
 
-Dispatch path: hub → SSH tunnel → mini (`mini-4` or `mini-5` per
-`server/explorer/direct-targets.ts`) → `claude` or `codex` CLI inline. The
-GKE codex-lane path is **not** wired in this instance — direct-SSH-to-mini is
-the only live target. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) §2
-for the full dispatch flow.
+Dispatch path: hub → CC `POST /api/tasks` (DNA project `14920`, built in
+`server/explorer/cc-dispatch.ts`) → a **GKE codex-lane** (`gke-codex-lane-1..13`)
+runs `claude` or `codex` with the briefing. CC owns lane selection + resilience.
+The legacy direct-SSH-to-mini path (`mini-4`/`mini-5`) was removed in the CC→GKE
+migration. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) §2 for the full
+dispatch flow.
 
 ---
 
@@ -130,9 +131,9 @@ rotation procedures.
   point; `clients/{dna,scriptsage,health,cache,dna-kpis}.ts` wrap upstream
   services with TTL caching.
 - `server/explorer/` — the five autonomy lanes (Explorer, Executor /
-  fleet-routes, PR-babysitter, test-debug, consolidation) plus the direct
-  SSH dispatch path (`direct-dispatch.ts`, `direct-ssh.ts`,
-  `direct-targets.ts`, `cascade-dispatch.ts`).
+  fleet-routes, PR-babysitter, test-debug, consolidation) plus the CC dispatch
+  path: `cc-dispatch.ts` (the CC `/api/tasks` HTTP client) with
+  `cascade-dispatch.ts` / `direct-dispatch.ts` as thin CC-backed facades.
 - `client/` — Vite + React 18 + TanStack Query + shadcn/ui + wouter (hash
   routing for static-host friendliness).
 - `shared/schema.ts` — Drizzle table definitions (sqlite dialect).

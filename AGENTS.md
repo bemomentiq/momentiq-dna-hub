@@ -80,12 +80,13 @@ The Explorer lane auto-files into the right repo based on the finding's
 
 ## Dispatch path (so you understand what calls you)
 
-Hub Express server → SSH tunnel → `mini-4` or `mini-5` (ngrok endpoints in
-`server/explorer/direct-targets.ts`) → spawns `claude` or `codex` CLI inline
-with the briefing this repo built in `server/explorer/prompt.ts`. The GKE
-codex-lane path is wired in code but not the active production path — direct
-SSH to minis is the current production target. See
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) §2 for the full picture.
+Hub Express server → CC `POST /api/tasks` (DNA project `14920`, built in
+`server/explorer/cc-dispatch.ts`) → a GKE codex-lane (`gke-codex-lane-1..13`)
+runs `claude` or `codex` with the briefing this repo built in
+`server/explorer/prompt.ts`. CC owns lane selection + resilience. The legacy
+direct-SSH-to-mini path (`mini-4`/`mini-5`) was removed in the CC→GKE
+migration. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) §2 for the full
+picture.
 
 ## Don't
 
