@@ -557,15 +557,14 @@ export function registerExplorerRoutes(app: Express) {
       agentBriefing: fleetBriefing,
     };
 
-    // 3. Dispatch via 4-way cascade (mini-4 primary, mini-5 fallback).
-    // Cron-triggered explorer runs go through direct SSH, not CC queue.
+    // 3. Dispatch to a GKE codex-lane via CC (project 14920).
     const preferredProvider = executor === "pin-claude" ? "claude" as const : "codex" as const;
     const dispatch = await dispatchWithCascade({
       kind: "explorer",
       runId: run.id,
       briefing: fleetBriefing,
       preferredProvider,
-      preferredMini: "mini-4",
+      repoUrl,
       hubStatusUrl: `${prodHost}/api/explorer/runs/${run.id}/ingest`,
       ccApiUrl: cfg.cc_api_url,
       ccApiKey: cfg.cc_api_key,

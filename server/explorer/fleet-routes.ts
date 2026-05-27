@@ -774,15 +774,15 @@ export function registerFleetRoutes(app: Express) {
       : buildExecutorBriefing({ ...baseOpts, open_issue_count: undefined });
     storage.updateFleetRun(run.id, { agent_briefing: briefing });
 
-    // 3. Dispatch via 4-way cascade (mini-4 primary, mini-5 fallback; codex primary provider).
-    // Cron-triggered executor runs go through direct SSH, not CC queue.
+    // 3. Dispatch to a GKE codex-lane via CC (project 14920). CC owns lane
+    //    selection + resilience; the provider pin picks codex vs claude.
     const preferredProvider = executor === "pin-claude" ? "claude" as const : "codex" as const;
     const dispatch = await dispatchWithCascade({
       kind: "executor",
       runId: run.id,
       briefing,
       preferredProvider,
-      preferredMini: "mini-4",
+      repoUrl,
       hubStatusUrl: `${prodHost}/api/fleet/runs/${run.id}`,
       ccApiUrl: cfg.cc_api_url,
       ccApiKey: cfg.cc_api_key,
@@ -859,7 +859,7 @@ export function registerFleetRoutes(app: Express) {
       runId: run.id,
       briefing,
       preferredProvider,
-      preferredMini: "mini-4",
+      repoUrl,
       hubStatusUrl: `${prodHost}/api/fleet/runs/${run.id}`,
       ccApiUrl: cfg.cc_api_url,
       ccApiKey: cfg.cc_api_key,
@@ -910,8 +910,8 @@ export function registerFleetRoutes(app: Express) {
   // ==================== AD-HOC RUN DISPATCH (immediate, p0, concurrent) ====================
   // Two paths:
   //  - executor in {pin-codex, pin-claude, unassigned}  → CC queue (FIFO).
-  //  - executor in {pin-codex-direct, pin-claude-direct} → SSH-via-CC into mini-5,
-  //    spawn agent inline. Concurrent to whatever CC is doing.
+  //  - executor in {pin-codex-direct, pin-claude-direct} → CC task at p0 so it
+  //    jumps the queue onto a GKE codex-lane, concurrent to other CC work.
   app.post("/api/run/dispatch", async (req, res) => {
     const body = z.object({
       user_prompt: z.string().min(3).max(8000),
@@ -1119,14 +1119,14 @@ export function registerFleetRoutes(app: Express) {
     storage.updateFleetRun(run.id, { agent_briefing: briefing });
     storage.updateRun(explorerRun.id, { summary: `Audit fleet run #${run.id}` } as any);
 
-    // 3. Dispatch via 4-way cascade
+    // 3. Dispatch to a GKE codex-lane via CC (project 14920)
     const preferredProvider = executor === "pin-claude" ? "claude" as const : "codex" as const;
     const dispatch = await dispatchWithCascade({
       kind: "executor",
       runId: run.id,
       briefing,
       preferredProvider,
-      preferredMini: "mini-4",
+      repoUrl,
       hubStatusUrl: `${prodHost}/api/fleet/runs/${run.id}`,
       ccApiUrl: cfg.cc_api_url,
       ccApiKey: cfg.cc_api_key,
