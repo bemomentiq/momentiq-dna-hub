@@ -23,6 +23,7 @@ import { checkDnaHealth, checkScriptsageHealth, checkKalodataHealth } from "./cl
 import { cacheStats, cacheBust } from "./clients/cache";
 import { getHitlQueue, computeHitlBurden } from "./hitl";
 import { DNA_PIPELINE_STAGES } from "../shared/dna-pipeline-stages";
+import { ALLOWED_REPOS, filterAllowedRepos } from "@shared/allowed-repos";
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   // Health check first — must be reachable without auth so Railway / uptime
@@ -53,16 +54,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!token || String(token).length < 10) {
       return void res.status(400).json({ error: "GitHub token not configured" });
     }
-    // Content platform: pull issues across momentiq-dna, dna-hub, scriptsage-{backend,frontend}.
-    // Keep default_gh_repo/frontend_gh_repo for backwards compat; merge + dedupe.
-    const contentRepos = [
-      "bemomentiq/momentiq-dna",
-      "bemomentiq/momentiq-dna-hub",
-      "bemomentiq/momentiq-scriptsage-backend",
-      "bemomentiq/momentiq-scriptsage-frontend",
-    ];
-    const reposRaw = [cfg.default_gh_repo, cfg.frontend_gh_repo, ...contentRepos].filter(Boolean);
-    const repos = Array.from(new Set(reposRaw));
+    // DNA-9: the planning surface (Issues) is locked to the DNA allow-list.
+    // Configured repos are merged in but filtered down to ALLOWED_REPOS and
+    // deduped, so off-scope repos (e.g. scriptsage) never surface here.
+    const repos = filterAllowedRepos([cfg.default_gh_repo, cfg.frontend_gh_repo, cfg.hub_gh_repo, ...ALLOWED_REPOS]);
     const state = (req.query.state as string) || "open";
     const labels = (req.query.labels as string) || ""; // comma-sep, default = all
     const headers = {
@@ -120,7 +115,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ issues: all, repos, errors, fetched_at: new Date().toISOString() });
   });
 
-  // Live roadmap: GitHub milestones + epic:* labelled issues across the 4 content repos.
+  // Live roadmap: GitHub milestones + epic:* labelled issues across the DNA
+  // allow-list repos (DNA-9 — planning surface locked to ALLOWED_REPOS).
   // Groups issues by epic:* label; non-fatal per-repo errors are surfaced in `errors`.
   app.get("/api/content-platform/roadmap", async (_req, res) => {
     const cfg = storage.getCronConfig() as any;
@@ -128,12 +124,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!token || String(token).length < 10) {
       return void res.status(400).json({ error: "GitHub token not configured" });
     }
-    const repos = [
-      "bemomentiq/momentiq-dna",
-      "bemomentiq/momentiq-dna-hub",
-      "bemomentiq/momentiq-scriptsage-backend",
-      "bemomentiq/momentiq-scriptsage-frontend",
-    ];
+    const repos: string[] = [...ALLOWED_REPOS];
     const headers = {
       "Accept": "application/vnd.github+json",
       "Authorization": `Bearer ${token}`,

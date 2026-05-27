@@ -6,6 +6,7 @@ import type { DraftTask } from "@shared/schema";
 import { createSoloIssueForTask, createIssueForTask, createBatchedFleetTracker, groupDrafts, composeMergedTask, inferArea, pickRepoForTask } from "./github-sync";
 import { dispatchWithCascade } from "./cascade-dispatch";
 import { DNA_FOCUS_AREAS, FOCUS_AREA_IDS } from "@shared/dna-focus-areas";
+import { ALLOWED_REPOS, isAllowedRepo, filterAllowedRepos } from "@shared/allowed-repos";
 
 // Build a Fleet-style agentBriefing for the Explorer run.
 // Wraps the Opus prompt as an 8-H2 compliant task that a Codex or Claude lane
@@ -116,7 +117,13 @@ export function registerExplorerRoutes(app: Express) {
   // ============ Cron config ============
   app.get("/api/cron-config", (_req, res) => res.json(storage.getCronConfigSafe()));
   app.patch("/api/cron-config", (req, res) => {
-    const updates = z.object({
+    // DNA-9: planning-surface repos are locked to the allow-list. A non-allowed
+    // repo must fail closed with a 400 (not the generic 500 ZodError path), so
+    // we safeParse and surface field errors instead of letting .parse() throw.
+    const repoField = z.string().refine(isAllowedRepo, {
+      message: `repo must be one of: ${ALLOWED_REPOS.join(", ")}`,
+    });
+    const schema = z.object({
       enabled: z.boolean().optional(),
       interval_minutes: z.number().int().min(5).max(1440).optional(),
       model: z.string().optional(),
@@ -126,9 +133,9 @@ export function registerExplorerRoutes(app: Express) {
       cc_api_key: z.string().optional(),
       default_cc_project_slug: z.string().optional(),
       auto_create_gh_issues: z.boolean().optional(),
-      default_gh_repo: z.string().optional(),
-      frontend_gh_repo: z.string().optional(),
-      hub_gh_repo: z.string().optional(),
+      default_gh_repo: repoField.optional(),
+      frontend_gh_repo: repoField.optional(),
+      hub_gh_repo: repoField.optional(),
       batch_same_area: z.boolean().optional(),
       batch_min_siblings: z.number().int().min(2).max(20).optional(),
       github_token: z.string().optional().nullable(),
@@ -151,7 +158,15 @@ export function registerExplorerRoutes(app: Express) {
       auto_resume_audit: z.boolean().optional(),
       auto_resume_audit_max: z.number().int().min(1).max(10).optional(),
       audit_interval_hours: z.number().int().min(1).max(168).optional(),
-    }).parse(req.body);
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return void res.status(400).json({
+        error: "Invalid cron config",
+        details: parsed.error.flatten().fieldErrors,
+      });
+    }
+    const updates = parsed.data;
 
     // If interval_minutes changed, recompute next_due_at
     const current = storage.getCronConfig();
@@ -772,7 +787,8 @@ export function registerExplorerRoutes(app: Express) {
     if (!token || String(token).length < 10) {
       return void res.status(400).json({ error: "GitHub token not configured. Set Explorer Settings → GitHub PAT." });
     }
-    const repos = [cfg.default_gh_repo, cfg.frontend_gh_repo, cfg.hub_gh_repo].filter(Boolean);
+    // DNA-9: only reconcile from allow-listed planning repos.
+    const repos = filterAllowedRepos([cfg.default_gh_repo, cfg.frontend_gh_repo, cfg.hub_gh_repo]);
     const seen = new Set<string>();
     let added = 0;
     let updated = 0;

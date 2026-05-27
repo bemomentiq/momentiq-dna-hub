@@ -11,6 +11,9 @@ import {
   type FleetRun, type InsertFleetRun,
   type PrOutcome, type InsertPrOutcome,
 } from "@shared/schema";
+import {
+  ALLOWED_REPOS, DEFAULT_BACKEND_REPO, DEFAULT_HUB_REPO, isAllowedRepo,
+} from "@shared/allowed-repos";
 
 const sqlite = new Database("data.db");
 sqlite.pragma("journal_mode = WAL");
@@ -307,6 +310,16 @@ function ensureSchema() {
       "UPDATE cron_config SET focus_mission = ? WHERE id=1",
     ).run("Drive momentiq-dna repo to production-readiness per companion site signals. Prioritize Code Completeness > Test Coverage > E2E Flows > Schema Integrity. Epic mode enabled.");
   }
+  // DNA-9: coerce any off-scope planning repos back into the allow-list. Legacy
+  // rows may have pointed default/frontend/hub repos at non-DNA repos; the
+  // planning surface is now locked to ALLOWED_REPOS. Reads never throw on legacy
+  // values — we just heal the singleton row here so writes/UI stay in-scope.
+  const repoRow = sqlite.prepare("SELECT default_gh_repo, frontend_gh_repo, hub_gh_repo FROM cron_config WHERE id=1").get() as any;
+  if (repoRow) {
+    if (!isAllowedRepo(repoRow.default_gh_repo)) sqlite.prepare("UPDATE cron_config SET default_gh_repo = ? WHERE id=1").run(DEFAULT_BACKEND_REPO);
+    if (!isAllowedRepo(repoRow.frontend_gh_repo)) sqlite.prepare("UPDATE cron_config SET frontend_gh_repo = ? WHERE id=1").run(DEFAULT_BACKEND_REPO);
+    if (!isAllowedRepo(repoRow.hub_gh_repo)) sqlite.prepare("UPDATE cron_config SET hub_gh_repo = ? WHERE id=1").run(DEFAULT_HUB_REPO);
+  }
   // Seed GitHub PAT from environment if not already set in DB.
   // Set GH_PAT / GH_TOKEN / GITHUB_TOKEN env var on Railway; configure via Settings → GitHub PAT at runtime.
   const envPat = process.env.GH_PAT || process.env.GH_TOKEN || process.env.GITHUB_TOKEN || "";
@@ -406,6 +419,14 @@ export const storage = {
     return this.getCronConfigSafe();
   },
   updateCronConfig(updates: Partial<CronConfig>) {
+    // DNA-9: never persist an off-scope planning repo. The route layer returns
+    // 400 first; this guard protects any other write path into cron_config.
+    for (const field of ["default_gh_repo", "frontend_gh_repo", "hub_gh_repo"] as const) {
+      const v = (updates as any)[field];
+      if (v !== undefined && !isAllowedRepo(v)) {
+        throw new Error(`${field} must be one of: ${ALLOWED_REPOS.join(", ")} (got "${v}")`);
+      }
+    }
     db.update(cronConfig).set(updates).where(eq(cronConfig.id, 1)).run();
     return this.getCronConfig();
   },
