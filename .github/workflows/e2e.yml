@@ -6,7 +6,7 @@ on:
     branches: [main]
 jobs:
   playwright:
-    runs-on: railway-ci
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
