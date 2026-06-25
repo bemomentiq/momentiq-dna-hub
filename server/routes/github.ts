@@ -10,7 +10,16 @@ export function registerGithubRoutes(app: Express) {
     const cfg = storage.getCronConfig() as any;
     const token = cfg.github_token || process.env.GITHUB_TOKEN || process.env.GH_TOKEN || null;
     if (!token || String(token).length < 10) {
-      return void res.status(400).json({ error: "GitHub token not configured" });
+      // Fail soft: degrade to an empty 200 (mirrors the dna_configured/
+      // scriptsage_configured pattern) so unconfigured environments — e.g. CI
+      // with no PAT — render an empty state instead of spewing a console 400.
+      return void res.json({
+        issues: [],
+        repos: [],
+        errors: ["GitHub token not configured"],
+        configured: false,
+        fetched_at: new Date().toISOString(),
+      });
     }
     // DNA-9: the planning surface (Issues) is locked to the DNA allow-list.
     // Configured repos are merged in but filtered down to ALLOWED_REPOS and
@@ -80,7 +89,16 @@ export function registerGithubRoutes(app: Express) {
     const cfg = storage.getCronConfig() as any;
     const token = cfg.github_token || process.env.GITHUB_TOKEN || process.env.GH_TOKEN || null;
     if (!token || String(token).length < 10) {
-      return void res.status(400).json({ error: "GitHub token not configured" });
+      // Fail soft: degrade to an empty 200 (see /api/gh-issues) so the Roadmap
+      // surface renders its "token not configured" hint without a console 400.
+      return void res.json({
+        milestones: [],
+        epics: [],
+        repos: [],
+        errors: ["GitHub token not configured"],
+        configured: false,
+        fetched_at: new Date().toISOString(),
+      });
     }
     const repos: string[] = [...ALLOWED_REPOS];
     const headers = {

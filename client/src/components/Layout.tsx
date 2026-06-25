@@ -27,7 +27,7 @@ export function Layout({
       <Sidebar mobileOpen={navOpen} onClose={() => setNavOpen(false)} />
       <main className="flex-1 min-w-0">
         <header className="border-b border-border bg-card/30 backdrop-blur sticky top-0 z-20">
-          <div className="px-4 sm:px-6 lg:px-8 py-4 lg:py-5 flex items-start justify-between gap-3 sm:gap-6">
+          <div className="px-4 sm:px-6 lg:px-8 py-4 lg:py-5 flex flex-wrap items-start justify-between gap-x-3 sm:gap-x-6 gap-y-2">
             <div className="flex items-start gap-3 min-w-0 flex-1">
               {/* Mobile hamburger — hidden on lg+ where the sidebar is permanent */}
               <button
@@ -43,19 +43,16 @@ export function Layout({
                 {subtitle && <p className="text-xs sm:text-sm text-muted-foreground mt-1 line-clamp-2">{subtitle}</p>}
               </div>
             </div>
-            <div className="shrink-0 hidden sm:flex items-center gap-2">
+            {/* Single action cluster — rendered ONCE so any test-id inside
+                `actions` stays unique. On sm+ it sits inline top-right; on very
+                narrow screens it wraps onto its own full-width second row so the
+                title doesn't get squeezed. */}
+            <div className="order-last w-full shrink-0 flex items-center gap-2 overflow-x-auto border-t border-border/50 pt-2 sm:order-none sm:w-auto sm:border-t-0 sm:pt-0">
               <LastUpdated />
               <PollingControl />
               <RefreshAll />
               {actions}
             </div>
-          </div>
-          {/* On very narrow screens, drop the actions onto a second row so the title doesn't get squeezed. */}
-          <div className="sm:hidden border-t border-border/50 px-4 py-2 flex items-center gap-2 overflow-x-auto">
-            <LastUpdated />
-            <PollingControl />
-            <RefreshAll />
-            {actions}
           </div>
         </header>
         <div className="px-4 sm:px-6 lg:px-8 py-4 lg:py-6">{children}</div>
