@@ -26,6 +26,7 @@ type IssuesResp = {
   repos: string[];
   errors: string[];
   fetched_at: string;
+  configured?: boolean;
 };
 
 const PRIORITY_DOT: Record<string, string> = {
@@ -170,10 +171,12 @@ export default function Issues() {
         </div>
       }
     >
-      {isError && (
+      {(isError || data?.configured === false) && (
         <div className="rounded-lg border border-rose-500/30 bg-rose-500/5 p-3 mb-4 text-sm text-rose-700 dark:text-rose-400">
           <AlertCircle className="h-4 w-4 inline mr-2" />
-          {(error as any)?.message || "Failed to fetch issues. Make sure GitHub PAT is configured in Explorer Settings."}
+          {data?.configured === false
+            ? "GitHub token not configured. Set github_token in cron config (or the GITHUB_TOKEN env var) to enable live issues."
+            : (error as any)?.message || "Failed to fetch issues. Make sure GitHub PAT is configured in Explorer Settings."}
         </div>
       )}
 

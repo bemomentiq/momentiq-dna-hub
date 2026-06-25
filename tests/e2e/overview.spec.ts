@@ -52,8 +52,8 @@ test.describe("Overview", () => {
     }
 
     await expect(page.getByText("not connected").first()).toBeVisible();
-    await expect(page.getByText("DNA_API_BASE", { exact: false })).toBeVisible();
-    await expect(page.getByText("DNA_NEON_READ_URL", { exact: false })).toBeVisible();
+    await expect(page.getByText("DNA_API_BASE", { exact: false }).first()).toBeVisible();
+    await expect(page.getByText("DNA_NEON_READ_URL", { exact: false }).first()).toBeVisible();
 
     await expectNoConsoleErrors(watcher);
   });

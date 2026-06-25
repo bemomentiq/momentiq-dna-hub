@@ -60,6 +60,7 @@ export default function Roadmap() {
   });
 
   const tokenMissing =
+    (data as any)?.configured === false ||
     (error as any)?.message?.includes("400") ||
     (error as any)?.message?.toLowerCase?.().includes("github token");
 

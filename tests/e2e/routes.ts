@@ -6,7 +6,7 @@ export type RouteSpec = {
 };
 
 export const ROUTES: RouteSpec[] = [
-  { path: "/", title: "Content Platform Overview" },
+  { path: "/", title: "DNA Pipeline Overview" },
   { path: "/exec", title: /Executive Brief/ },
   { path: "/themes", title: /Themes/ },
   { path: "/ab-runs", title: /A\/B Experiments/ },

@@ -73,7 +73,9 @@ export default function Run() {
       return r.json();
     },
     onSuccess: (data) => {
-      const where = data.direct ? `direct → CC task ${data.cc_task_id}` : `CC task ${data.cc_task_id}`;
+      const where = data.direct
+        ? `${data.agentId} (direct → CC task ${data.cc_task_id})`
+        : `CC task ${data.cc_task_id}`;
       setStatusMsg(`Dispatched run #${data.run.id} on ${data.model_pin} → ${where}`);
       setPrompt("");
       queryClient.invalidateQueries({ queryKey: ["/api/fleet/runs"] });
@@ -284,7 +286,7 @@ function LiveTail({ runId, status }: { runId: number; status: string }) {
   return (
     <div>
       <div className="flex items-center gap-2 mb-1">
-        <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Live tail (CC task)</div>
+        <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Live tail (mini-5 direct)</div>
         {isFetching && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
         {data?.alive && <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">alive</span>}
         {data?.exited && <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">exited</span>}
