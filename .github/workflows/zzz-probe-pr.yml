@@ -1,0 +1,13 @@
+name: zzz-probe-pr
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  arm:
+    uses: bemomentiq/.github/.github/workflows/auto-arm-automerge.yml@main
+    with:
+      target_branch: main
+    secrets: inherit
